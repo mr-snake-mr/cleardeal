@@ -139,6 +139,7 @@ Idempotency-Key: 7f3a-0001
 - The same `Idempotency-Key` returns the existing payment with `200`, not a second order. The key is `UNIQUE` in the database, so a race loses at the constraint rather than in application logic.
 - A second *live* payment for the same milestone violates `uq_payments_active_per_milestone` → `409 PAYMENT_ALREADY_ACTIVE`.
 - No connected merchant → `409 MERCHANT_NOT_CONNECTED`.
+- The milestone's version is not `APPROVED` → `409 AGREEMENT_NOT_APPROVED`. Added during the build: money follows the approved scope, and without this check a draft could be paid.
 
 `paypal_client_id` is returned because the browser-side JS SDK needs it to render the button. It is a **public** identifier by PayPal's own design — the secret is the other half of the pair and never leaves the server. Returning it is not a disclosure; omitting it would make the frontend depend on a value no endpoint supplies.
 

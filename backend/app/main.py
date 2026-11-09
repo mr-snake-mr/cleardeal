@@ -1,7 +1,7 @@
-"""App factory.
+﻿"""App factory.
 
 Deliberate omission: there is no `Base.metadata.create_all()` here. Schema
-changes go through Alembic only (docs/07 §6). create_all hides drift and cannot
+changes go through Alembic only (docs/07 Â§6). create_all hides drift and cannot
 express the constraints the schema depends on.
 """
 
@@ -14,7 +14,7 @@ from app.config import settings
 from app.database import SessionLocal, engine
 from app.errors import install_error_handlers
 from app.logging_config import install_logging
-from app.routers import agreements, auth, health, merchants, projects
+from app.routers import agreements, auth, health, merchants, payments, projects
 
 
 @asynccontextmanager
@@ -53,7 +53,7 @@ def create_app() -> FastAPI:
     )
 
     # A published signing key is an authentication bypass, and it is one in the
-    # sandbox demo too — the token is forgeable regardless of which PayPal host
+    # sandbox demo too â€” the token is forgeable regardless of which PayPal host
     # the app talks to. So the guard is on `debug`, not on `paypal_env`: any
     # deployment that is not explicitly a debug server must carry a real secret.
     if not settings.debug and settings.session_secret.startswith("dev-insecure"):
@@ -64,9 +64,9 @@ def create_app() -> FastAPI:
 
     install_logging()
 
-    # docs/10 §4: "startup fails if the key is absent while a merchant row
+    # docs/10 Â§4: "startup fails if the key is absent while a merchant row
     # exists". Without this the app boots, reports CONNECTED, and only fails on
-    # the first payment — the worst possible moment to discover it.
+    # the first payment â€” the worst possible moment to discover it.
     with SessionLocal() as probe:
         from sqlalchemy import func, select
 
@@ -94,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(projects.router, prefix="/api/v1")
     app.include_router(merchants.router, prefix="/api/v1")
     app.include_router(agreements.router, prefix="/api/v1")
+    app.include_router(payments.router, prefix="/api/v1")
 
     # Installed after the routers so the handlers are the outermost layer and
     # catch failures raised inside route code as well as during validation.
