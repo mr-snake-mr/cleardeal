@@ -1,0 +1,44 @@
+# One command that answers "is it real".
+#
+# It runs the three things a claim about this repo rests on, in the order that
+# fails fastest: lint, migrations from empty, then the suite. Anything non-zero
+# stops the run, because a partial verification reported as success is worse than
+# no verification.
+
+$ErrorActionPreference = "Stop"
+$backend = Join-Path $PSScriptRoot "backend"
+$python = Join-Path $backend ".venv\Scripts\python.exe"
+
+if (-not (Test-Path $python)) {
+    Write-Host "No virtualenv at $python. Create one with:" -ForegroundColor Yellow
+    Write-Host "  cd backend; python -m venv .venv; .\.venv\Scripts\pip install -e `".[dev]`""
+    exit 1
+}
+
+Push-Location $backend
+try {
+    Write-Host "== ruff ==" -ForegroundColor Cyan
+    & $python -m ruff check .
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    Write-Host "== migrations: upgrade -> downgrade -> upgrade ==" -ForegroundColor Cyan
+    $env:DATABASE_URL = "sqlite:///./verify.db"
+    $env:SESSION_SECRET = "verify-secret-2f8c1d4e6a9b0c3f5e7d1a2b4c6d8e0f"
+    $env:CREDENTIALS_ENCRYPTION_KEY = "6f1c2b7d4e8a90c3f5d6b7a1e2c4d8f0a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d2"
+    & $python -m alembic -c alembic.ini upgrade head
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $python -m alembic -c alembic.ini downgrade base
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $python -m alembic -c alembic.ini upgrade head
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    Write-Host "== tests ==" -ForegroundColor Cyan
+    & $python -m pytest -q
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    Write-Host "VERIFIED" -ForegroundColor Green
+}
+finally {
+    Remove-Item (Join-Path $backend "verify.db") -ErrorAction SilentlyContinue
+    Pop-Location
+}

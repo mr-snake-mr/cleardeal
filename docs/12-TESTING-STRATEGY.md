@@ -60,6 +60,24 @@ Each runs in a real browser against a real backend. 1–3 and 7–9 use the real
 | E8 | Approve `v1` after `v2` exists | `409 STALE_VERSION`; UI shows "a newer version exists" and a reload action, not a generic error |
 | E9 | Tamper with the amount client-side | Capture proceeds on the server's amount or is refused; the tampered value never appears in any request the server acts on |
 
+### Status at 2026-11-09
+
+None of these runs in a browser yet: the page is one HTML file and the suite
+drives the API. What each row below claims is that the *behaviour* is asserted,
+not that it was clicked through.
+
+| # | Status |
+|---|---|
+| E1 | Covered at API level — `test_e2e_golden_path.py::test_the_whole_path_from_brief_to_scope_verdict` |
+| E2 | **Not run.** Needs a live sandbox merchant; A-1 and A-2 are open |
+| E3 | Covered — same golden-path test, `OUT_OF_SCOPE` with its resolved citation |
+| E4 | Covered — `test_change_requests.py::test_already_included_never_carries_a_price` |
+| E5 | Covered — `test_e2e_scenarios.py::test_e5_a_mixed_request_returns_three_distinct_verdicts` |
+| E6 | **Not implemented.** Approving a change into `v(n+1)` is cut (docs/13); the change-request routes stop at the analysis |
+| E7 | Covered — `test_webhooks.py::test_a_replayed_event_id_writes_nothing_and_is_still_200` |
+| E8 | Covered — `test_agreements.py::test_approving_a_superseded_version_is_refused` |
+| E9 | Covered — `test_payments.py::test_a_payment_reads_the_amount_from_the_database` (the request has no amount field at all) |
+
 **E2 is the one to run against the real Sandbox before the demo.** Every other scenario can be re-run on a plane; E2 cannot, because it is the only one where a foreign system has to agree with us.
 
 ## 5. Negative controls — the discipline that keeps this honest

@@ -1,0 +1,42 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: pip install ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Migrations apply from empty
+        env:
+          DATABASE_URL: sqlite:///./ci.db
+          SESSION_SECRET: ci-secret-2f8c1d4e6a9b0c3f5e7d1a2b4c6d8e0f
+          CREDENTIALS_ENCRYPTION_KEY: 6f1c2b7d4e8a90c3f5d6b7a1e2c4d8f0a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d2
+        run: |
+          python -m alembic -c alembic.ini upgrade head
+          python -m alembic -c alembic.ini downgrade base
+          python -m alembic -c alembic.ini upgrade head
+
+      # The suite builds its own throwaway database and runs the real migrations
+      # against it, so there is no service container here on purpose.
+      - name: Test
+        run: python -m pytest -q
+
+      - name: Coverage floor
+        run: python -m pytest --cov=app --cov-fail-under=80 -q
