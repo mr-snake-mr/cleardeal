@@ -55,7 +55,26 @@ def signed_string(transmission_id: str, timestamp: str, webhook_id: str, raw: by
     return f"{transmission_id}|{timestamp}|{webhook_id}|{zlib.crc32(raw) & 0xFFFFFFFF}"
 
 
-def verify(*, raw: bytes, headers, webhook_id: str, cert_pem: bytes) -> str:
+# PayPal's self-verify scheme signs a CRC32 of the body, not the body: an
+# observed transmission can be repacked with a different body and the same
+# checksum. Freshness is the cheap half of the mitigation — a captured
+# transmission stops working. The complete answer is the `verify-webhook-signature`
+# postback, recorded in docs/16 as the production path.
+_MAX_TRANSMISSION_AGE_SECONDS = 300
+
+
+def _is_fresh(stamp: str, now: datetime) -> bool:
+    try:
+        parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if parsed.tzinfo is None:
+        return False
+    age = (now - parsed).total_seconds()
+    return -60 <= age <= _MAX_TRANSMISSION_AGE_SECONDS
+
+
+def verify(*, raw: bytes, headers, webhook_id: str, cert_pem: bytes, now=None) -> str:
     """Raises `SignatureInvalid`; returns the transmission id for the log line."""
     # `headers` arrives keyed by role ("id"/"time"/"sig"); the HTTP names live in
     # HEADERS so the router has one place to read them from the request.
@@ -78,6 +97,9 @@ def verify(*, raw: bytes, headers, webhook_id: str, cert_pem: bytes) -> str:
         )
     except (InvalidSignature, ValueError, TypeError) as exc:
         raise SignatureInvalid("signature did not verify") from exc
+
+    if now is not None and not _is_fresh(values["time"], now):
+        raise SignatureInvalid("transmission timestamp is outside the window")
 
     return values["id"]
 

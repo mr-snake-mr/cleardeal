@@ -100,12 +100,12 @@ def _cert(monkeypatch, signing):
     _, pem = signing
     from app.routers import webhooks as router_module
 
-    monkeypatch.setattr(router_module, "fetch_certificate", lambda url: pem)
+    monkeypatch.setattr(router_module, "_download_certificate", lambda url: pem)
 
 
 def _headers(signing, raw: bytes, *, transmission="tid-0001", webhook_id=WEBHOOK_ID) -> dict:
     key, _ = signing
-    stamp = "2026-11-09T12:00:00Z"
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     crc = zlib.crc32(raw) & 0xFFFFFFFF
     signed = f"{transmission}|{stamp}|{webhook_id}|{crc}"
     signature = base64.b64encode(
@@ -303,3 +303,42 @@ def test_an_event_for_an_unknown_order_is_recorded_and_ignored(client, db, signi
     event = db.get(WebhookEvent, "WH-EVT-UNKNOWN")
     assert event is not None
     assert event.processed_at is not None
+
+
+def test_a_stale_transmission_is_refused(client, db, signing):
+    """The scheme signs a CRC32, not the body, so an observed transmission is
+    repackable. Freshness is what stops a captured one being replayed tomorrow."""
+    payment = _payment(db)
+    payload = _capture_event(order_id=payment.paypal_order_id)
+    raw = json.dumps(payload).encode()
+
+    key, _ = signing
+    stamp = "2020-01-01T00:00:00Z"
+    crc = zlib.crc32(raw) & 0xFFFFFFFF
+    signed = f"tid-old|{stamp}|{WEBHOOK_ID}|{crc}"
+    headers = {
+        "paypal-transmission-id": "tid-old",
+        "paypal-transmission-time": stamp,
+        "paypal-transmission-sig": base64.b64encode(
+            key.sign(signed.encode(), padding.PKCS1v15(), hashes.SHA256())
+        ).decode(),
+        "paypal-cert-url": "https://api.paypal.com/cert.pem",
+    }
+
+    assert client.post("/webhooks/paypal", content=raw, headers=headers).status_code == 400
+    db.expire_all()
+    assert db.get(Payment, payment.id).status == "CREATED"
+
+
+def test_a_certificate_url_outside_paypal_is_refused(client, db, signing):
+    """The header is attacker-controlled. If it could name the key, the
+    signature would only prove that the attacker signed their own message."""
+    payment = _payment(db)
+    payload = _capture_event(order_id=payment.paypal_order_id)
+    raw = json.dumps(payload).encode()
+    headers = _headers(signing, raw)
+    headers["paypal-cert-url"] = "https://evil.example/cert.pem"
+
+    assert client.post("/webhooks/paypal", content=raw, headers=headers).status_code == 400
+    db.expire_all()
+    assert db.get(Payment, payment.id).status == "CREATED"

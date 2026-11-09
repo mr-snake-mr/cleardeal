@@ -29,19 +29,46 @@ DbSession = Annotated[Session, Depends(get_db)]
 _CERT_CACHE: dict[str, bytes] = {}
 
 
+# The certificate URL arrives in the request. Trusting it is the whole game: an
+# attacker who can name the key that verifies their own signature has not been
+# verified at all. So the host must be PayPal's, not merely "https".
+_ALLOWED_CERT_HOSTS = (".paypal.com", ".paypalobjects.com")
+
+
+def _is_paypal_host(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False
+    host = parsed.hostname.lower()
+    return any(
+        host == allowed.lstrip(".") or host.endswith(allowed)
+        for allowed in _ALLOWED_CERT_HOSTS
+    )
+
+
 def fetch_certificate(url: str) -> bytes:
     """A seam, like `paypal_client_for`: production fetches, tests inject.
 
-    Only `https` is accepted. A `http` cert URL would let anyone on the path
-    substitute the key that is supposed to prove the sender.
+    The host allow-list is the security property. `https` alone proves the
+    transport, not the sender; `paypal-cert-url` is attacker-controlled input and
+    must not be able to name an arbitrary signing key.
     """
+    if not _is_paypal_host(url):
+        raise ValueError("certificate URL is not a PayPal host")
     if url in _CERT_CACHE:
         return _CERT_CACHE[url]
-    if not url.startswith("https://"):
-        raise ValueError("certificate URL must be https")
+    content = _download_certificate(url)
+    _CERT_CACHE[url] = content
+    return content
+
+
+def _download_certificate(url: str) -> bytes:
+    """The network call, alone, so tests can replace it without also replacing
+    the host allow-list above — the check is the property, not the fetch."""
     response = httpx.get(url, timeout=10.0)
     response.raise_for_status()
-    _CERT_CACHE[url] = response.content
     return response.content
 
 
@@ -74,6 +101,7 @@ async def paypal_webhook(request: Request, db: DbSession) -> dict:
             headers=header_values,
             webhook_id=settings.paypal_webhook_id,
             cert_pem=certificate,
+            now=datetime.now(UTC),
         )
     except webhook_service.SignatureInvalid:
         raise HTTPException(
