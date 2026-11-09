@@ -117,6 +117,17 @@ Rule for the build: an assumption that turns out false must change the documents
 | **How to close** | One provider sandbox key and a 20-line sender |
 | **Severity** | Low for judging, medium for honesty — the review page must be reachable in the demo, so the link is copied rather than emailed |
 
+### A-12 — "Verified" means the quote matches the draft, not the client's words
+
+| | |
+|---|---|
+| **Assumption** | A citation that resolves to a stored section proves the classification |
+| **Status** | **Partly false.** `agreement_sections.body` is M2's own output, so resolution proves the model agrees with the model. Nothing ties a generated section to a brief quote the way `Requirement.explicit` is tied to one. The claim it supports is "this is what the agreement we generated says", not "this is what the client asked for" |
+| **Also unprovable by substring** | Quoting `"included"` out of `"are not included"` reverses the meaning and still resolves; negation is not a boundary problem. The UI shows the quote beside the section so a reader can see it |
+| **Also lost at persistence** | `ResolvedItem.downgraded` / `.reason` exist in memory only; `change_items` has no column for them, so a caught fabrication and an honest "we are unsure" look identical once stored |
+| **How to close** | Anchor each generated section to the brief requirement it satisfies; add `downgrade_reason` to `change_items`; show the quote inline in the review UI |
+| **Severity** | High for the marketing sentence, none for the demo — the mechanism is real, the wording must be narrower |
+
 ### A-11 — A client approval can be attributed to the client
 
 | | |

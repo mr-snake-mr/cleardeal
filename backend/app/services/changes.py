@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from app.ai.schemas import Citation, ScopeItem
 
 # Below this, a quote matches almost any section and proves nothing.
-MIN_QUOTE_CHARS = 8
+MIN_QUOTE_CHARS = 12
 
 NEEDS_CLARIFICATION = "NEEDS_CLARIFICATION"
 
@@ -45,6 +45,30 @@ class ResolvedItem:
 
 def _normalise(text: str) -> str:
     return " ".join(text.split()).casefold()
+
+
+def _contains_whole_words(haystack: str, needle: str) -> bool:
+    """Substring search that refuses to match the middle of a word.
+
+    `"pagination control"` is a substring of `"pagination controls"`, so a bare
+    `in` accepts a quotation the agreement does not make. The ends of a quote
+    must land on word boundaries.
+
+    What this cannot do, and does not claim to: it cannot tell that quoting
+    `"included"` out of `"are not included"` reverses the meaning. Negation is
+    not a boundary problem; the reviewer reads the quote in the UI.
+    """
+    start = 0
+    while True:
+        index = haystack.find(needle, start)
+        if index == -1:
+            return False
+        before = haystack[index - 1] if index else " "
+        end = index + len(needle)
+        after = haystack[end] if end < len(haystack) else " "
+        if not before.isalnum() and not after.isalnum():
+            return True
+        start = index + 1
 
 
 def _resolve_one(item: ScopeItem, sections: dict[str, str]) -> ResolvedItem:
@@ -71,7 +95,7 @@ def _resolve_one(item: ScopeItem, sections: dict[str, str]) -> ResolvedItem:
         quote = _normalise(citation.quote)
         if len(quote) < MIN_QUOTE_CHARS:
             return _downgrade(resolved, "the quote is too short to prove anything")
-        if quote not in _normalise(body):
+        if not _contains_whole_words(_normalise(body), quote):
             # The most convincing failure there is: a real section, a real
             # sentence, the wrong one.
             return _downgrade(

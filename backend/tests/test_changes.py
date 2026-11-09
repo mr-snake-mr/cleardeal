@@ -171,3 +171,32 @@ def test_confidence_cannot_be_a_number():
 def test_a_citation_must_carry_text():
     with pytest.raises(ValidationError):
         Citation(section_key="SCOPE", quote="")
+
+
+# ------------------------------------------------------- boundary of a quotation
+
+
+BOUNDARY_SECTIONS = {
+    "SCOPE": "The pagination controls are described here, and nowhere else.",
+    "EXCLUSIONS": "Copywriting, photography and paid advertising are not included.",
+}
+
+
+def test_a_quote_that_stops_mid_word_is_downgraded():
+    """`"pagination control"` is a substring of `"pagination controls"`, so a
+    bare `in` check accepts a quote the agreement does not make. The end of a
+    quotation has to be the end of a word."""
+    item = _item(evidence=[Citation(section_key="SCOPE", quote="pagination control")])
+
+    [resolved] = resolve_evidence([item], BOUNDARY_SECTIONS)
+
+    assert resolved.classification == "NEEDS_CLARIFICATION"
+    assert resolved.downgraded is True
+
+
+def test_a_whole_phrase_still_resolves():
+    item = _item(evidence=[Citation(section_key="SCOPE", quote="pagination controls")])
+
+    [resolved] = resolve_evidence([item], BOUNDARY_SECTIONS)
+
+    assert resolved.downgraded is False
