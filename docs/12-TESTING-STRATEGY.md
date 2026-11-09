@@ -68,6 +68,7 @@ not that it was clicked through.
 
 | # | Status |
 |---|---|
+| Browser level | 	est_ui_smoke.py drives one real browser against a real uvicorn process: sign in, create a project, and read the status lines the page itself writes. It skips when Playwright or Chromium is absent, and a skip is reported as a skip. Run on 2026-11-09 with Chromium installed: it opened the page, signed in, created a project and read the status lines back, so the JavaScript is proven to run and not merely to exist in a string |
 | E1 | Covered at API level — `test_e2e_golden_path.py::test_the_whole_path_from_brief_to_scope_verdict` |
 | E2 | **Not run.** Needs a live sandbox merchant; A-1 and A-2 are open |
 | E3 | Covered — same golden-path test, `OUT_OF_SCOPE` with its resolved citation |
