@@ -1,8 +1,19 @@
 # ClearDeal — Phase 0 / Phase 1 Dossier
 
-**Status:** awaiting approval on the merchant model only. Application code has begun (Tasks 1–2).
+**Status:** all 18 documents delivered. Awaiting approval on the merchant model only.
 **Rebuilt:** 2026-11-09 after an unexplained workspace deletion. See §*What happened*.
 **Target:** PayPal AI Hackathon
+
+### Current state
+
+| Area | State | Evidence |
+|---|---|---|
+| Dossier 00–17 | complete | this directory |
+| Backend foundation | Tasks 1–2 done | 48 tests, 99.04% coverage |
+| Schema + migration | done | 14 tables, 11 indexes; `upgrade → downgrade → upgrade` clean |
+| Auth, projects, AI, PayPal, frontend | not started | Day 1 blocks 1.5+ per [13](13-SCHEDULE.md) |
+
+Definition of done: [15 §7](15-MVP-SCOPE.md). Open assumptions: [16](16-UNVERIFIED-ASSUMPTIONS.md) — A-1 and A-2 are the two that can change what the product is allowed to say.
 
 ## Read in this order
 
