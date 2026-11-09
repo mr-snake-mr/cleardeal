@@ -193,3 +193,6 @@ class ChangeItem(Base):
     # Nullable on purpose: an ALREADY_INCLUDED item must never carry a price.
     suggested_cost: Mapped[Decimal | None] = mapped_column(Money, default=None)
     timeline_days: Mapped[int | None] = mapped_column(Integer, default=None)
+    # Why a classification was downgraded, when it was. Without this the
+    # record cannot tell a caught fabrication from an honest "unsure".
+    downgrade_reason: Mapped[str | None] = mapped_column(Text, default=None)
