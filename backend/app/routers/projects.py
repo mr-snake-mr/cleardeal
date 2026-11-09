@@ -135,6 +135,17 @@ def delete_project(project_id: uuid.UUID, user: CurrentUser, db: DbSession) -> N
         raise _not_found()
     try:
         project_service.delete(db, project=project, actor_id=user.id)
+    except project_service.ProjectHasApprovedAgreement:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "PROJECT_HAS_APPROVED_AGREEMENT",
+                "message": (
+                    "This project has a signed agreement. Deleting it would destroy the "
+                    "hash and both signatures, which are the evidence it was signed."
+                ),
+            },
+        ) from None
     except project_service.ProjectHasPayments:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

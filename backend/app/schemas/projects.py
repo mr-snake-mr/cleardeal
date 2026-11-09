@@ -40,6 +40,15 @@ class ProjectCreate(BaseModel):
     deadline: date | None = None
 
     @model_validator(mode="after")
+    def _no_nulls_on_required(self):
+        # `{"name": null}` used to reach the database and raise IntegrityError,
+        # which escaped as a 500. A required field cannot be unset by PATCH.
+        for field in ("name", "client_email", "brief"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
+    @model_validator(mode="after")
     def _at_least_one_field(self):
         # An empty PATCH is a client bug, not a no-op: answering 200 hides it.
         if not self.model_fields_set:
@@ -81,6 +90,15 @@ class ProjectUpdate(BaseModel):
     client_email: Email | None = None
     brief: str | None = Field(default=None, min_length=20, max_length=10_000)
     deadline: date | None = None
+
+    @model_validator(mode="after")
+    def _no_nulls_on_required(self):
+        # `{"name": null}` used to reach the database and raise IntegrityError,
+        # which escaped as a 500. A required field cannot be unset by PATCH.
+        for field in ("name", "client_email", "brief"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
 
     @model_validator(mode="after")
     def _at_least_one_field(self):

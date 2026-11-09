@@ -46,6 +46,26 @@ class InvitationExpired(InvitationError):
         super().__init__("this invitation has expired")
 
 
+class SelfInvitation(InvitationError):
+    """The owner inviting their own address is the cheap version of A-11."""
+
+    def __init__(self) -> None:
+        super().__init__("the owner cannot be their own client")
+
+
+class EmailAlreadyRegistered(InvitationError):
+    """A link may only sign in a principal the link created.
+
+    If the address already has an account, that account signs in with its own
+    credentials. Without this, whoever holds the token holds the account: accept
+    used to issue a session for the matching user row, and the invitation
+    response hands the inviter the token.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("this address already has an account; sign in instead")
+
+
 def _digest(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
@@ -58,6 +78,10 @@ def _naive(moment: datetime) -> datetime:
 def create(
     db: Session, *, project: Project, email: str, now: datetime
 ) -> tuple[Invitation, str]:
+    owner = db.get(User, project.owner_id)
+    if owner is not None and owner.email.lower() == email.lower():
+        raise SelfInvitation()
+
     token = secrets.token_urlsafe(32)
     expires_at = now + timedelta(hours=INVITE_TTL_HOURS)
 
@@ -99,13 +123,17 @@ def accept(db: Session, *, token: str, now: datetime) -> tuple[User, Invitation]
     if _naive(invitation.expires_at) < _naive(now):
         raise InvitationExpired()
 
-    user = db.scalars(
+    existing = db.scalars(
         select(User).where(func.lower(User.email) == invitation.email.lower())
-    ).one_or_none()
-    if user is None:
-        user = User(email=invitation.email, name="Client", password_hash=None)
-        db.add(user)
-        db.flush()
+    ).first()
+    if existing is not None:
+        # Refused rather than reused. Reusing it is account takeover: the
+        # inviter chose the address and was handed the token.
+        raise EmailAlreadyRegistered()
+
+    user = User(email=invitation.email, name="Client", password_hash=None)
+    db.add(user)
+    db.flush()
 
     invitation.used_at = now
     db.add(

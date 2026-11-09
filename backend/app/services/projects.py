@@ -70,6 +70,14 @@ def get_for_owner(db: Session, *, owner_id: uuid.UUID, project_id: uuid.UUID) ->
     ).scalar_one_or_none()
 
 
+class ProjectHasApprovedAgreement(Exception):
+    """A signed agreement is evidence too.
+
+    Deleting the project destroys the hash, both approval timestamps and the
+    milestone amounts, while the approval audit rows survive pointing at nothing.
+    """
+
+
 class ProjectHasPayments(Exception):
     """A project with money attached is not deletable.
 
@@ -91,18 +99,26 @@ def update(db: Session, *, project: Project, changes) -> Project:
 def delete(db: Session, *, project: Project, actor_id: uuid.UUID) -> None:
     from sqlalchemy import func, select
 
-    from app.models import AuditEvent, Payment
+    from app.models import Agreement, AgreementVersion, AuditEvent, Payment
 
+    project_id = project.id
     held = db.scalar(
-        select(func.count()).select_from(Payment).where(Payment.project_id == project.id)
+        select(func.count()).select_from(Payment).where(Payment.project_id == project_id)
     )
     if held:
         raise ProjectHasPayments()
-    project_id = project.id
-    db.delete(project)
-    db.commit()
-    # Written after the delete: `project_id` no longer points at a row, which is
-    # the honest record for a deletion.
+
+    signed = db.scalar(
+        select(func.count())
+        .select_from(AgreementVersion)
+        .join(Agreement, AgreementVersion.agreement_id == Agreement.id)
+        .where(Agreement.project_id == project_id, AgreementVersion.status == "APPROVED")
+    )
+    if signed:
+        raise ProjectHasApprovedAgreement()
+
+    # Same transaction as the delete: an audit row written after a commit is an
+    # audit row that can be lost, leaving a deletion nobody can attribute.
     db.add(
         AuditEvent(
             project_id=None,
@@ -111,4 +127,5 @@ def delete(db: Session, *, project: Project, actor_id: uuid.UUID) -> None:
             payload={"project_id": str(project_id)},
         )
     )
+    db.delete(project)
     db.commit()

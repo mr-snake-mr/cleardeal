@@ -13,13 +13,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
 from app.routers.auth import CurrentUser, set_session
-from app.schemas.auth import UserOut
+from app.schemas.auth import Email, UserOut
 from app.services import invitations as invitation_service
 from app.services import projects as project_service
 
@@ -31,7 +31,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 class InviteCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    email: str = Field(min_length=3, max_length=320)
+    email: Email
 
 
 def _base() -> str:
@@ -49,9 +49,18 @@ def invite(
             detail={"code": "NOT_FOUND", "message": "Project not found."},
         )
 
-    invitation, token = invitation_service.create(
-        db, project=project, email=payload.email, now=datetime.now(UTC)
-    )
+    try:
+        invitation, token = invitation_service.create(
+            db, project=project, email=str(payload.email), now=datetime.now(UTC)
+        )
+    except invitation_service.SelfInvitation:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "SELF_INVITATION",
+                "message": "You cannot invite your own address as the client.",
+            },
+        ) from None
     return {
         "email": invitation.email,
         "expires_at": invitation.expires_at,
@@ -71,6 +80,17 @@ def _accept(db: Session, token: str) -> UserOut:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "INVITATION_USED", "message": "This invitation has already been used."},
+        ) from None
+    except invitation_service.EmailAlreadyRegistered:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "EMAIL_ALREADY_REGISTERED",
+                "message": (
+                    "This address already has an account. Sign in with it to approve; "
+                    "a link cannot stand in for a password."
+                ),
+            },
         ) from None
     except invitation_service.InvitationExpired:
         raise HTTPException(
