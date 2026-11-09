@@ -102,3 +102,30 @@ class AgreementDraft(BaseModel):
     title: str = Field(min_length=3, max_length=200)
     sections: list[SectionDraft] = Field(min_length=1, max_length=20)
     milestones: list[MilestoneDraft] = Field(min_length=1, max_length=20)
+
+
+class Citation(BaseModel):
+    """A pointer the service must be able to resolve (docs/05 §3.1).
+
+    `section_key` is a key, not an id: the model never sees database ids, so it
+    cannot invent a plausible-looking UUID.
+    """
+
+    section_key: str = Field(min_length=2, max_length=40)
+    quote: str = Field(min_length=1, max_length=600)
+
+
+class ScopeItem(BaseModel):
+    feature: str = Field(min_length=3, max_length=300)
+    classification: Literal["ALREADY_INCLUDED", "OUT_OF_SCOPE", "NEEDS_CLARIFICATION"]
+    explanation: str = Field(min_length=5, max_length=1200)
+    # `high | medium | low`. No numeric confidence: `0.91` is a number a model
+    # cannot know, and a fabricated one is worse than none (docs/05 §3.1).
+    confidence: Literal["high", "medium", "low"]
+    evidence: list[Citation] = Field(default_factory=list, max_length=6)
+
+
+class ChangeAnalysis(BaseModel):
+    """What M3 returns, before the service has checked any of it."""
+
+    items: list[ScopeItem] = Field(min_length=1, max_length=12)
