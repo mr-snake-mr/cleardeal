@@ -32,7 +32,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.money import Money
@@ -82,6 +82,20 @@ class AgreementVersion(Base):
     # sha256 over the rendered sections + milestones at approval time.
     content_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # ORM-only, no DDL: the hash is computed over the rendered content, so the
+    # loader has to hand it over in a stable order. `selectin` also stops a
+    # serialisation loop from firing one query per milestone.
+    sections: Mapped[list["AgreementSection"]] = relationship(
+        cascade="all, delete-orphan",
+        order_by="AgreementSection.ordinal",
+        lazy="selectin",
+    )
+    milestones: Mapped[list["Milestone"]] = relationship(
+        cascade="all, delete-orphan",
+        order_by="Milestone.ordinal",
+        lazy="selectin",
+    )
 
 
 class AgreementSection(Base):

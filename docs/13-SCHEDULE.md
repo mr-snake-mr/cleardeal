@@ -24,7 +24,9 @@ Dossier 00–17, skill gate established, `git init` before the first file.
 | 1.8 | Boundary test (`routers/` may not import `models/`), ruff clean | `test_boundaries.py` |
 
 **Gate G1:** 70+ tests green, coverage ≥ 80%, migration round-trip clean, audit PASS on Tasks 1–5.
-**Status (2026-11-09):** 1.1–1.4, 1.7 and 1.8 complete. 1.5 partial — register, login, logout, `me` and signed sessions ship; the magic-link exchange does not. 1.6 partial — create, list and read ship; update and delete do not. Day 2 has started: 2.1 (Gemini client), 2.3 (M1 brief analysis) and 2.4 (M2 agreement draft with the `sum(milestones) == budget` invariant in cents). **186 tests, 95.92%, round-trip clean.** 2.2 and 2.5–2.9 unstarted.
+**Status (2026-11-09):** 1.1–1.4, 1.7 and 1.8 complete. 1.5 partial — register, login, logout, `me` and signed sessions ship; the magic-link exchange does not. 1.6 partial — create, list and read ship; update and delete do not. Day 2 has started: 2.1 (Gemini client), 2.3 (M1 brief analysis), 2.4 (M2 agreement draft with the `sum(milestones) == budget` invariant in cents) and 2.5 (version persistence, `content_hash`, send / approve / reject). **196 tests, 94.48%, round-trip clean.** 2.2 and 2.6–2.9 unstarted.
+
+**Deviation, deliberate:** `PATCH /agreements/{version_id}` (docs/08 §4) is not implemented. A draft is corrected by drafting `v(n+1)`, which the same contract already provides; a mutable draft path is extra surface for the demo path to trip over. Recorded here rather than quietly omitted.
 
 **Risk on Day 1:** this is the highest-risk day because nothing is demoable at the end of it. Resist the urge to jump to the UI; every later day assumes the schema is right.
 

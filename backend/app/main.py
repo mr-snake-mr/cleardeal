@@ -14,7 +14,7 @@ from app.config import settings
 from app.database import SessionLocal, engine
 from app.errors import install_error_handlers
 from app.logging_config import install_logging
-from app.routers import auth, health, merchants, projects
+from app.routers import agreements, auth, health, merchants, projects
 
 
 @asynccontextmanager
@@ -93,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(projects.router, prefix="/api/v1")
     app.include_router(merchants.router, prefix="/api/v1")
+    app.include_router(agreements.router, prefix="/api/v1")
 
     # Installed after the routers so the handlers are the outermost layer and
     # catch failures raised inside route code as well as during validation.

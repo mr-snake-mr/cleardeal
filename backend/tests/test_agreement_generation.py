@@ -14,7 +14,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from app.ai.schemas import AgreementDraft, BriefAnalysis, MilestoneDraft, Requirement
+from app.ai.schemas import AgreementDraft, MilestoneDraft
 from app.services.agreements import (
     assert_milestones_sum_to_budget,
     draft_agreement,
@@ -47,14 +47,7 @@ def _draft(*cents: int) -> AgreementDraft:
     )
 
 
-def _analysis() -> BriefAnalysis:
-    return BriefAnalysis(
-        requirements=[
-            Requirement(text="A five page site", source="inferred", quote=None),
-        ],
-        ambiguities=[],
-        risks=[],
-    )
+REQUIREMENTS = ["A five page site"]
 
 
 class StubClient:
@@ -149,7 +142,7 @@ def test_draft_agreement_sends_the_budget_and_wires_the_invariant():
     stub = StubClient(_draft(12_000, 18_000))
 
     result = draft_agreement(
-        analysis=_analysis(), budget=Decimal("300.00"), currency="USD", client=stub
+        requirements=REQUIREMENTS, budget=Decimal("300.00"), currency="USD", client=stub
     )
 
     assert result.milestones[0].amount_cents == 12_000
@@ -162,7 +155,7 @@ def test_draft_agreement_sends_the_budget_and_wires_the_invariant():
 
 
 def test_the_prompt_carries_the_budget_currency_and_requirements():
-    prompt = render_draft_prompt(_analysis(), Decimal("300.00"), "USD")
+    prompt = render_draft_prompt(REQUIREMENTS, Decimal("300.00"), "USD")
 
     assert "300.00" in prompt
     assert "USD" in prompt
