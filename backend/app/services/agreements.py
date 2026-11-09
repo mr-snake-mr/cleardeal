@@ -27,12 +27,20 @@ import uuid
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.ai.schemas import AgreementDraft
-from app.models import Agreement, AgreementSection, AgreementVersion, AuditEvent, Milestone, Project
+from app.models import (
+    Agreement,
+    AgreementSection,
+    AgreementVersion,
+    AuditEvent,
+    Invitation,
+    Milestone,
+    Project,
+)
 
 PROMPT_PATH = (
     pathlib.Path(__file__).resolve().parent.parent / "ai" / "prompts" / "agreement_draft.md"
@@ -63,6 +71,18 @@ class InvalidState(AgreementError):
     def __init__(self, status: str, wanted: str) -> None:
         self.status = status
         super().__init__(f"version is {status}; {wanted} required")
+
+
+class RoleNotYours(AgreementError):
+    """A signature by someone who is not that party.
+
+    Until this existed, `role` was whatever the request body said and the only
+    caller was the owner, so one person could sign both sides (docs/16 A-11).
+    """
+
+    def __init__(self, role: str) -> None:
+        self.role = role
+        super().__init__(f"this account may not sign as {role}")
 
 
 class ContentChanged(AgreementError):
@@ -295,6 +315,29 @@ def get_for_owner(
 # ------------------------------------------------------------------ lifecycle
 
 
+def get_for_participant(db: Session, *, version_id: uuid.UUID, actor):
+    """Owner or accepted client. `send` stays owner-only; signing does not."""
+    version = db.scalars(
+        select(AgreementVersion)
+        .join(Agreement, AgreementVersion.agreement_id == Agreement.id)
+        .join(Project, Agreement.project_id == Project.id)
+        .where(AgreementVersion.id == version_id)
+    ).one_or_none()
+    if version is None:
+        return None
+    agreement = db.get(Agreement, version.agreement_id)
+    project = db.get(Project, agreement.project_id) if agreement else None
+    if project is None:
+        return None
+    if project.owner_id == actor.id:
+        return version
+    from app.services.invitations import accepted_for_project
+
+    if accepted_for_project(db, project_id=project.id, email=actor.email) is not None:
+        return version
+    return None
+
+
 def send(db: Session, *, version: AgreementVersion, actor_id: uuid.UUID) -> AgreementVersion:
     if version.status != "DRAFT":
         raise InvalidState(version.status, "DRAFT")
@@ -315,12 +358,39 @@ def send(db: Session, *, version: AgreementVersion, actor_id: uuid.UUID) -> Agre
     return version
 
 
+def _assert_may_sign(db: Session, *, version: AgreementVersion, role: str, actor) -> None:
+    """Bind the role to a principal, not to a string in a JSON body."""
+    agreement = db.get(Agreement, version.agreement_id)
+    project = db.get(Project, agreement.project_id) if agreement else None
+    if project is None:
+        raise RoleNotYours(role)
+
+    if role == "freelancer":
+        if actor.id != project.owner_id:
+            raise RoleNotYours(role)
+        return
+
+    # The client side: never the owner, and only an account that accepted an
+    # invitation for this project.
+    if actor.id == project.owner_id:
+        raise RoleNotYours(role)
+    invited = db.scalars(
+        select(Invitation).where(
+            Invitation.project_id == project.id,
+            func.lower(Invitation.email) == actor.email.lower(),
+            Invitation.used_at.is_not(None),
+        )
+    ).one_or_none()
+    if invited is None:
+        raise RoleNotYours(role)
+
+
 def approve(
     db: Session,
     *,
     version: AgreementVersion,
     role: str,
-    actor_id: uuid.UUID,
+    actor,
     now,
 ) -> AgreementVersion:
     agreement = db.get(Agreement, version.agreement_id)
@@ -328,6 +398,7 @@ def approve(
         raise StaleVersion(version.version_no, agreement.current_version if agreement else 0)
     if version.status != "PENDING_CLIENT":
         raise InvalidState(version.status, "PENDING_CLIENT")
+    _assert_may_sign(db, version=version, role=role, actor=actor)
     # The document a reader sees must still be the document that was hashed.
     if content_hash_for(version) != version.content_hash:
         raise ContentChanged()
@@ -347,7 +418,7 @@ def approve(
     db.add(
         AuditEvent(
             project_id=_project_id(db, version),
-            actor_id=actor_id,
+            actor_id=actor.id,
             event_type="AGREEMENT_APPROVED",
             payload={
                 "version_no": version.version_no,
@@ -356,7 +427,7 @@ def approve(
                 # caller, not proven by a second session. Without this the log
                 # reads as "the client approved", which is a claim the log
                 # cannot support (docs/16 A-11).
-                "role_source": "self_asserted",
+                "role_source": "session",
             },
         )
     )

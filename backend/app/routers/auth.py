@@ -67,7 +67,7 @@ def require_user(db: DbSession, user_id: SessionUserId) -> UserOut:
 CurrentUser = Annotated[UserOut, Depends(require_user)]
 
 
-def _set_session(response: Response, user_id: uuid.UUID) -> None:
+def set_session(response: Response, user_id: uuid.UUID) -> None:
     response.set_cookie(
         COOKIE_NAME,
         issue_session(user_id),
@@ -94,7 +94,7 @@ def register(payload: RegisterRequest, db: DbSession, response: Response) -> Use
             },
         ) from None
 
-    _set_session(response, user.id)
+    set_session(response, user.id)
     return UserOut.model_validate(user)
 
 
@@ -107,7 +107,7 @@ def login(payload: LoginRequest, db: DbSession, response: Response) -> UserOut:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "INVALID_CREDENTIALS", "message": "Email or password is incorrect."},
         )
-    _set_session(response, user.id)
+    set_session(response, user.id)
     return UserOut.model_validate(user)
 
 

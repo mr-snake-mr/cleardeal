@@ -258,7 +258,9 @@ def test_send_refuses_when_the_milestones_no_longer_sum(client, ai, db):
 # ------------------------------------------------------------------- approval
 
 
-def test_both_approvals_make_the_version_approved_and_leave_the_hash_alone(client, ai):
+def test_both_approvals_make_the_version_approved_and_leave_the_hash_alone(
+    client, ai, client_side
+):
     _signup(client)
     project = _project(client)
     created = _agreement(client, project["id"]).json()
@@ -271,7 +273,7 @@ def test_both_approvals_make_the_version_approved_and_leave_the_hash_alone(clien
     assert first.status_code == 200, first.text
     assert first.json()["status"] == "PENDING_CLIENT"
 
-    second = client.post(f"/api/v1/agreements/{version_id}/approve", json={"role": "client"})
+    second = client_side(client, project["id"], version_id)
 
     assert second.status_code == 200, second.text
     assert second.json()["status"] == "APPROVED"
@@ -353,7 +355,9 @@ def test_get_reports_whether_the_content_still_matches_the_hash(client, ai, db):
     assert client.get(f"/api/v1/agreements/{version_id}").json()["content_intact"] is False
 
 
-def test_approve_refuses_when_the_milestones_no_longer_sum(client, ai, db):
+def test_approve_refuses_when_the_milestones_no_longer_sum(
+    client, ai, db, client_side
+):
     """`send` is not the only gate: a row can change before approval, and
     APPROVED is the state a payment reads."""
     _signup(client)
@@ -367,7 +371,7 @@ def test_approve_refuses_when_the_milestones_no_longer_sum(client, ai, db):
     milestone.amount = Decimal("150.00")
     db.commit()
 
-    response = client.post(f"/api/v1/agreements/{version_id}/approve", json={"role": "client"})
+    response = client_side(client, project["id"], version_id)
 
     # The hash moves first, and both refusals are correct; the sum check is the
     # one that names the money.
@@ -426,32 +430,3 @@ def test_another_users_agreement_is_404_not_403(client, ai):
     )
 
 
-def test_dual_approval_is_one_actor_asserting_two_roles_today(client, ai, db):
-    """KNOWN LIMITATION, proved rather than hidden (docs/16 A-11).
-
-    There is no client session yet, so the only caller who can reach these
-    routes is the project owner — and `role` is whatever the request body says.
-    A judge reading the timeline would see two approvals from one account.
-
-    The audit payload says `role_source: "self_asserted"` so the log does not
-    claim the client did it. When client access lands, this test is replaced by
-    one that proves two distinct principals, and this one must fail.
-    """
-    _signup(client)
-    project = _project(client)
-    version_id = _agreement(client, project["id"]).json()["id"]
-    client.post(f"/api/v1/agreements/{version_id}/send", json={})
-
-    client.post(f"/api/v1/agreements/{version_id}/approve", json={"role": "freelancer"})
-    final = client.post(f"/api/v1/agreements/{version_id}/approve", json={"role": "client"})
-
-    assert final.json()["status"] == "APPROVED"
-
-    rows = db.scalars(
-        select(AuditEvent).where(AuditEvent.event_type == "AGREEMENT_APPROVED")
-    ).all()
-    actors = {row.actor_id for row in rows}
-    roles = {row.payload["role"] for row in rows}
-    assert len(roles) == 2
-    assert len(actors) == 1, "the same actor presented both roles"
-    assert {row.payload["role_source"] for row in rows} == {"self_asserted"}

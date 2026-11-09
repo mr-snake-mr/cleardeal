@@ -47,10 +47,11 @@ def test_every_endpoint_the_page_calls_still_exists(client):
         assert path in html, path
 
 
-def test_the_page_carries_the_unknown_that_matters(client):
-    """The A-11 limitation is on screen, not only in a document: the client
-    approval in this build is the owner asserting a role."""
+def test_the_page_requires_two_principals(client):
+    """A-11 is closed, so the page must offer the invitation and must not imply
+    that the same session can sign both sides."""
     html = client.get(PAGE).text
 
-    assert "A-11" in html
-    assert "self-asserted" in html
+    assert "/invitations" in html
+    assert "Invite the client" in html
+    assert "Two signatures need two principals" in html

@@ -133,7 +133,7 @@ Rule for the build: an assumption that turns out false must change the documents
 | | |
 |---|---|
 | **Assumption** | `POST /agreements/{id}/approve` with `{"role": "client"}` represents the client's decision |
-| **Status** | **False today, and enforced as known.** There is no client session: the only caller who can reach the route is the project owner (`Project` has `client_email`, not a client account). So one person can present both roles, and the audit row records `role_source: "self_asserted"` so the log does not claim otherwise |
+| **Status** | **Closed.** Magic-link invitations issue a session for the invited address, and `approve` binds a role to a principal: the owner may sign only as freelancer, and only an account that accepted an invitation for this project may sign as client. Anything else is `409 ROLE_NOT_YOURS`, and the audit payload now says `role_source: session` rather than `self_asserted`. Proved by `test_two_distinct_principals_sign_and_the_agreement_is_approved` and `test_the_owner_cannot_sign_as_the_client` |
 | **If false** | The timeline shows two approvals from one account. A judge who notices concludes the dual-approval claim is theatre — which would be correct |
 | **How to close** | Magic-link exchange (block 1.5, unbuilt) plus a distinct actor id per approval, and `approve` refusing a second role from the same actor |
 | **Severity** | High for the claim, low for the demo path — the payment path only needs the version to reach `APPROVED` |

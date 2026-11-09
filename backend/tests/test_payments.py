@@ -126,7 +126,7 @@ def _merchant(client):
     assert response.status_code in (200, 201), response.text
 
 
-def _approved_version(client, db) -> dict:
+def _approved_version(client, db, client_side) -> dict:
     """Brief → agreement (stubbed AI) → send → both approvals."""
     from app.routers import agreements as agreement_router
 
@@ -174,7 +174,8 @@ def _approved_version(client, db) -> dict:
         version = created.json()
         client.post(f"/api/v1/agreements/{version['id']}/send", json={})
         client.post(f"/api/v1/agreements/{version['id']}/approve", json={"role": "freelancer"})
-        client.post(f"/api/v1/agreements/{version['id']}/approve", json={"role": "client"})
+        signed = client_side(client, project["id"], version["id"])
+        assert signed.status_code == 200, signed.text
         return version
     finally:
         agreement_router.get_ai_client = original
@@ -193,11 +194,11 @@ def _create_payment(client, milestone_id, key="idem-key-0001"):
 # -------------------------------------------------------------------- creation
 
 
-def test_a_payment_reads_the_amount_from_the_database(client, db, paypal):
+def test_a_payment_reads_the_amount_from_the_database(client, db, paypal, client_side):
     stub = paypal(StubPayPal())
     _signup(client)
     _merchant(client)
-    version = _approved_version(client, db)
+    version = _approved_version(client, db, client_side)
 
     response = _create_payment(client, _milestone_id(version))
 
@@ -215,13 +216,13 @@ def test_a_payment_reads_the_amount_from_the_database(client, db, paypal):
     assert stored.status == "CREATED"
 
 
-def test_the_same_idempotency_key_returns_the_same_payment(client, db, paypal):
+def test_the_same_idempotency_key_returns_the_same_payment(client, db, paypal, client_side):
     """A double-click must not buy the work twice. The key is UNIQUE in the
     database so a race loses at the constraint, not in application logic."""
     stub = paypal(StubPayPal())
     _signup(client)
     _merchant(client)
-    version = _approved_version(client, db)
+    version = _approved_version(client, db, client_side)
 
     first = _create_payment(client, _milestone_id(version))
     second = _create_payment(client, _milestone_id(version))
@@ -232,11 +233,11 @@ def test_the_same_idempotency_key_returns_the_same_payment(client, db, paypal):
     assert len(stub.orders) == 1
 
 
-def test_a_second_live_payment_for_the_same_milestone_is_refused(client, db, paypal):
+def test_a_second_live_payment_for_the_same_milestone_is_refused(client, db, paypal, client_side):
     paypal(StubPayPal())
     _signup(client)
     _merchant(client)
-    version = _approved_version(client, db)
+    version = _approved_version(client, db, client_side)
     _create_payment(client, _milestone_id(version))
 
     response = _create_payment(client, _milestone_id(version), key="a-different-key")
@@ -245,10 +246,10 @@ def test_a_second_live_payment_for_the_same_milestone_is_refused(client, db, pay
     assert response.json()["code"] == "PAYMENT_ALREADY_ACTIVE"
 
 
-def test_no_connected_merchant_is_a_conflict_not_a_crash(client, db, paypal):
+def test_no_connected_merchant_is_a_conflict_not_a_crash(client, db, paypal, client_side):
     paypal(StubPayPal())
     _signup(client)
-    version = _approved_version(client, db)
+    version = _approved_version(client, db, client_side)
 
     response = _create_payment(client, _milestone_id(version))
 
@@ -256,7 +257,7 @@ def test_no_connected_merchant_is_a_conflict_not_a_crash(client, db, paypal):
     assert response.json()["code"] == "MERCHANT_NOT_CONNECTED"
 
 
-def test_paying_a_milestone_of_an_unapproved_version_is_refused(client, db, paypal):
+def test_paying_a_milestone_of_an_unapproved_version_is_refused(client, db, paypal, client_side):
     """The product's claim is that money follows the approved scope. Without
     this, a draft could be paid and the claim is decoration."""
     from app.routers import agreements as agreement_router
@@ -310,11 +311,11 @@ def test_paying_a_milestone_of_an_unapproved_version_is_refused(client, db, payp
 # -------------------------------------------------------------------- capture
 
 
-def test_a_verified_capture_marks_the_payment_and_the_milestone(client, db, paypal):
+def test_a_verified_capture_marks_the_payment_and_the_milestone(client, db, paypal, client_side):
     stub = paypal(StubPayPal())
     _signup(client)
     _merchant(client)
-    version = _approved_version(client, db)
+    version = _approved_version(client, db, client_side)
     payment = _create_payment(client, _milestone_id(version)).json()
 
     response = client.post(
@@ -340,11 +341,13 @@ def test_a_verified_capture_marks_the_payment_and_the_milestone(client, db, payp
     assert event.payload["payee_present"] is False
 
 
-def test_a_capture_that_cannot_prove_itself_is_reconciliation_required(client, db, paypal):
+def test_a_capture_that_cannot_prove_itself_is_reconciliation_required(
+    client, db, paypal, client_side
+):
     paypal(StubPayPal(failure=PayPalVerificationError("amount did not match")))
     _signup(client)
     _merchant(client)
-    version = _approved_version(client, db)
+    version = _approved_version(client, db, client_side)
     payment = _create_payment(client, _milestone_id(version)).json()
 
     response = client.post(
@@ -360,11 +363,11 @@ def test_a_capture_that_cannot_prove_itself_is_reconciliation_required(client, d
     assert stored.captured_at is None
 
 
-def test_capturing_with_the_wrong_order_id_is_refused(client, db, paypal):
+def test_capturing_with_the_wrong_order_id_is_refused(client, db, paypal, client_side):
     stub = paypal(StubPayPal())
     _signup(client)
     _merchant(client)
-    version = _approved_version(client, db)
+    version = _approved_version(client, db, client_side)
     payment = _create_payment(client, _milestone_id(version)).json()
 
     response = client.post(
@@ -377,11 +380,11 @@ def test_capturing_with_the_wrong_order_id_is_refused(client, db, paypal):
     assert stub.captures == [], "no capture may be attempted for another order"
 
 
-def test_capturing_twice_is_refused_on_state(client, db, paypal):
+def test_capturing_twice_is_refused_on_state(client, db, paypal, client_side):
     paypal(StubPayPal())
     _signup(client)
     _merchant(client)
-    version = _approved_version(client, db)
+    version = _approved_version(client, db, client_side)
     payment = _create_payment(client, _milestone_id(version)).json()
     client.post(
         f"/api/v1/payments/{payment['payment_id']}/capture",
@@ -397,11 +400,11 @@ def test_capturing_twice_is_refused_on_state(client, db, paypal):
     assert again.json()["code"] == "PAYMENT_STATE_INVALID"
 
 
-def test_another_users_payment_is_404(client, db, paypal):
+def test_another_users_payment_is_404(client, db, paypal, client_side):
     paypal(StubPayPal())
     _signup(client, email="owner@example.test")
     _merchant(client)
-    version = _approved_version(client, db)
+    version = _approved_version(client, db, client_side)
     payment = _create_payment(client, _milestone_id(version)).json()
 
     _signup(client, email="intruder@example.test")

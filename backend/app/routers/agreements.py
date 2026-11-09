@@ -123,6 +123,18 @@ def _refusal(exc: agreement_service.AgreementError) -> HTTPException:
                 "details": {"approved_version": exc.approved, "current_version": exc.current},
             },
         )
+    if isinstance(exc, agreement_service.RoleNotYours):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ROLE_NOT_YOURS",
+                "message": (
+                    f"This account may not sign as the {exc.role}. The freelancer signs "
+                    "from the owner's session; the client signs from the invitation link."
+                ),
+                "details": {"role": exc.role},
+            },
+        )
     if isinstance(exc, agreement_service.VersionRace):
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -180,7 +192,7 @@ def create_agreement(
 
 @router.get("/agreements/{version_id}", response_model=VersionOut)
 def get_agreement(version_id: uuid.UUID, user: CurrentUser, db: DbSession) -> VersionOut:
-    version = agreement_service.get_for_owner(db, owner_id=user.id, version_id=version_id)
+    version = agreement_service.get_for_participant(db, version_id=version_id, actor=user)
     if version is None:
         raise _not_found()
     return _out(version)
@@ -201,13 +213,13 @@ def send_agreement(version_id: uuid.UUID, user: CurrentUser, db: DbSession) -> V
 def approve_agreement(
     version_id: uuid.UUID, payload: ApproveRequest, user: CurrentUser, db: DbSession
 ) -> VersionOut:
-    version = agreement_service.get_for_owner(db, owner_id=user.id, version_id=version_id)
+    version = agreement_service.get_for_participant(db, version_id=version_id, actor=user)
     if version is None:
         raise _not_found()
     try:
         return _out(
             agreement_service.approve(
-                db, version=version, role=payload.role, actor_id=user.id, now=datetime.now(UTC)
+                db, version=version, role=payload.role, actor=user, now=datetime.now(UTC)
             )
         )
     except agreement_service.AgreementError as exc:

@@ -105,3 +105,28 @@ def _clean_database():
         session.commit()
     finally:
         session.close()
+
+@pytest.fixture
+def client_side():
+    """A second browser, with its own cookie jar.
+
+    The client is a different principal now, so it cannot share the owner's
+    session: approving from the same jar would be exactly the A-11 hole this
+    replaced. Returns the response of the client's approval.
+    """
+
+    def run(owner_client, project_id, version_id, email="client@example.test"):
+        invited = owner_client.post(
+            f"/api/v1/projects/{project_id}/invitations", json={"email": email}
+        )
+        assert invited.status_code == 201, invited.text
+        token = invited.json()["invite_url"].rsplit("/", 1)[-1]
+
+        with TestClient(create_app(), base_url="https://testserver") as other:
+            accepted = other.post(f"/api/v1/invitations/{token}/accept")
+            assert accepted.status_code == 200, accepted.text
+            return other.post(
+                f"/api/v1/agreements/{version_id}/approve", json={"role": "client"}
+            )
+
+    return run

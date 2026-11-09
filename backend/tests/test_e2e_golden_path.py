@@ -129,7 +129,7 @@ def provider(monkeypatch):
     return install
 
 
-def test_the_whole_path_from_brief_to_scope_verdict(client, provider):
+def test_the_whole_path_from_brief_to_scope_verdict(client, provider, client_side):
     provider()
 
     assert (
@@ -176,7 +176,7 @@ def test_the_whole_path_from_brief_to_scope_verdict(client, provider):
 
     assert client.post(f"/api/v1/agreements/{body['id']}/send", json={}).status_code == 200
     client.post(f"/api/v1/agreements/{body['id']}/approve", json={"role": "freelancer"})
-    approved = client.post(f"/api/v1/agreements/{body['id']}/approve", json={"role": "client"})
+    approved = client_side(client, project_id, body["id"])
     assert approved.json()["status"] == "APPROVED"
 
     checked = client.post(

@@ -99,7 +99,7 @@ def _signup(client, email="freelancer@example.test"):
     assert response.status_code == 201, response.text
 
 
-def _version(client) -> dict:
+def _version(client, client_side) -> dict:
     """A project with an APPROVED version whose SCOPE section is known text."""
     from app.routers import agreements as agreement_router
 
@@ -149,7 +149,8 @@ def _version(client) -> dict:
         version = created.json()
         client.post(f"/api/v1/agreements/{version['id']}/send", json={})
         client.post(f"/api/v1/agreements/{version['id']}/approve", json={"role": "freelancer"})
-        client.post(f"/api/v1/agreements/{version['id']}/approve", json={"role": "client"})
+        signed = client_side(client, project["id"], version["id"])
+        assert signed.status_code == 200, signed.text
         return {**version, "project_id": project["id"]}
     finally:
         agreement_router.get_ai_client = original
@@ -173,10 +174,10 @@ def _item(**overrides) -> ScopeItem:
 # ------------------------------------------------------------------ the happy path
 
 
-def test_a_resolved_citation_is_persisted_with_the_section_id(client, db, ai):
+def test_a_resolved_citation_is_persisted_with_the_section_id(client, db, ai, client_side):
     ai(ChangeAnalysis(items=[_item()]))
     _signup(client)
-    version = _version(client)
+    version = _version(client, client_side)
 
     response = _check(client, version["project_id"])
 
@@ -194,11 +195,13 @@ def test_a_resolved_citation_is_persisted_with_the_section_id(client, db, ai):
     assert db.scalars(select(ChangeRequest)).one().base_version_id == uuid.UUID(version["id"])
 
 
-def test_the_request_records_the_version_it_was_compared_against(client, db, ai):
+def test_the_request_records_the_version_it_was_compared_against(
+    client, db, ai, client_side
+):
     """`base_version_id` is the guarantee that the comparison never moves."""
     ai(ChangeAnalysis(items=[_item()]))
     _signup(client)
-    version = _version(client)
+    version = _version(client, client_side)
 
     _check(client, version["project_id"])
 
@@ -209,7 +212,9 @@ def test_the_request_records_the_version_it_was_compared_against(client, db, ai)
 # ------------------------------------------------------------------ the refusals
 
 
-def test_a_fabricated_citation_is_persisted_as_a_downgrade_with_its_reason(client, db, ai):
+def test_a_fabricated_citation_is_persisted_as_a_downgrade_with_its_reason(
+    client, db, ai, client_side
+):
     """The whole point. It must be visible in the record, not just in memory."""
     ai(
         ChangeAnalysis(
@@ -221,7 +226,7 @@ def test_a_fabricated_citation_is_persisted_as_a_downgrade_with_its_reason(clien
         )
     )
     _signup(client)
-    version = _version(client)
+    version = _version(client, client_side)
 
     response = _check(client, version["project_id"])
 
@@ -238,7 +243,7 @@ def test_a_fabricated_citation_is_persisted_as_a_downgrade_with_its_reason(clien
     assert stored.downgrade_reason
 
 
-def test_already_included_never_carries_a_price(client, db, ai):
+def test_already_included_never_carries_a_price(client, db, ai, client_side):
     """Charging for work already sold is the failure this product exists to
     prevent, so the API makes the field unavailable rather than zero."""
     ai(
@@ -252,7 +257,7 @@ def test_already_included_never_carries_a_price(client, db, ai):
         )
     )
     _signup(client)
-    version = _version(client)
+    version = _version(client, client_side)
 
     response = _check(client, version["project_id"])
 
@@ -279,10 +284,10 @@ def test_a_change_request_without_an_approved_version_is_refused(client, db, ai)
     assert response.json()["code"] == "NO_APPROVED_VERSION"
 
 
-def test_another_users_change_request_is_404(client, db, ai):
+def test_another_users_change_request_is_404(client, db, ai, client_side):
     ai(ChangeAnalysis(items=[_item()]))
     _signup(client, email="owner@example.test")
-    version = _version(client)
+    version = _version(client, client_side)
     request_id = _check(client, version["project_id"]).json()["change_request"]["id"]
 
     _signup(client, email="intruder@example.test")

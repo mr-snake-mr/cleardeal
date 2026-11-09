@@ -99,8 +99,10 @@
   <div id="agreement-actions" class="hidden">
     <button class="quiet" id="send">Send to both parties</button>
     <button class="quiet" id="approve-freelancer">Approve as freelancer</button>
-    <button class="quiet" id="approve-client">Approve as client</button>
+    <button class="quiet" id="approve-client">Approve as client (own session only)</button>
+    <button class="quiet" id="invite">Invite the client</button>
   </div>
+  <div id="invite-out"></div>
   <p class="status" id="agreement-status" role="status"></p>
 </section>
 
@@ -272,7 +274,27 @@ $("approve-client").addEventListener("click", async () => {
       method: "POST", body: JSON.stringify({ role: "client" }),
     });
     renderVersion();
-    say("agreement-status", "Approved. Payments read this state and nothing else.", "ok");
+    say(
+      "agreement-status",
+      "Approval refused unless you accepted the invitation for this project. " +
+      "Two signatures need two principals.",
+      "bad",
+    );
+  } catch (error) { say("agreement-status", error.message, "bad"); }
+});
+
+$("invite").addEventListener("click", async () => {
+  if (!state.project) { say("agreement-status", "Create the project first.", "bad"); return; }
+  try {
+    const invite = await api("/projects/" + state.project.id + "/invitations", {
+      method: "POST",
+      body: JSON.stringify({ email: $("client-email").value }),
+    });
+    $("invite-out").innerHTML = `
+      <p class="note">Client link, single use, expires in 72 hours:
+        <a href="${invite.invite_url}">${invite.invite_url}</a><br>
+        Open it in a private window: the client signs from their own session, not yours.</p>`;
+    say("agreement-status", "Invitation ready. Two signatures now need two people.", "ok");
   } catch (error) { say("agreement-status", error.message, "bad"); }
 });
 
