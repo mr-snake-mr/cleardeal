@@ -64,7 +64,12 @@ class AgreementVersion(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     agreement_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agreements.id", ondelete="CASCADE"))
     version_no: Mapped[int] = mapped_column(Integer)
-    status: Mapped[str] = mapped_column(String(20), default="DRAFT")
+    # server_default, not only a Python default: docs/07 declares the DEFAULT in
+    # the DDL, and a raw INSERT (migration script, psql, a future job) must not
+    # be able to create a row with a NULL status.
+    status: Mapped[str] = mapped_column(
+        String(20), default="DRAFT", server_default=text("'DRAFT'")
+    )
     budget_amount: Mapped[Decimal] = mapped_column(Money)
     # A version cannot outlive its author.
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
@@ -90,7 +95,7 @@ class AgreementSection(Base):
     section_key: Mapped[str] = mapped_column(String(40))
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
-    ordinal: Mapped[int] = mapped_column(Integer, default=0)
+    ordinal: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
 
 
 class Milestone(Base):
@@ -116,7 +121,9 @@ class Milestone(Base):
     acceptance: Mapped[list] = mapped_column(JSON)
     amount: Mapped[Decimal] = mapped_column(Money)
     due_date: Mapped[date | None] = mapped_column(Date, default=None)
-    status: Mapped[str] = mapped_column(String(20), default="PLANNED")
+    status: Mapped[str] = mapped_column(
+        String(20), default="PLANNED", server_default=text("'PLANNED'")
+    )
 
 
 class ChangeRequest(Base):
@@ -141,7 +148,9 @@ class ChangeRequest(Base):
     # evidence rule applies only once a proposal is finalised. The service owns
     # that rule; the database deliberately does not enforce it mid-flight.
     raw_text: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(20), default="ANALYSING")
+    status: Mapped[str] = mapped_column(
+        String(20), default="ANALYSING", server_default=text("'ANALYSING'")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

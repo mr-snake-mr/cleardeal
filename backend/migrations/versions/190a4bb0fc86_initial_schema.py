@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 166edfd6f11e
+Revision ID: 190a4bb0fc86
 Revises: 
-Create Date: 2026-11-09 18:40:48.534120
+Create Date: 2026-11-09 18:56:10.484421
 """
 
 from collections.abc import Sequence
@@ -13,7 +13,7 @@ from alembic import op
 import app.money  # noqa: F401  (custom column types referenced by dotted path)
 
 
-revision: str = '166edfd6f11e'
+revision: str = '190a4bb0fc86'
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -91,7 +91,7 @@ def upgrade() -> None:
     sa.Column('input_tokens', sa.Integer(), nullable=True),
     sa.Column('output_tokens', sa.Integer(), nullable=True),
     sa.Column('latency_ms', sa.Integer(), nullable=True),
-    sa.Column('validation_status', sa.String(length=30), nullable=False),
+    sa.Column('validation_status', sa.String(length=30), server_default=sa.text("'pending'"), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
@@ -104,7 +104,7 @@ def upgrade() -> None:
     sa.Column('project_id', sa.Uuid(), nullable=True),
     sa.Column('actor_id', sa.Uuid(), nullable=True),
     sa.Column('event_type', sa.String(length=60), nullable=False),
-    sa.Column('payload', sa.JSON(), nullable=False),
+    sa.Column('payload', sa.JSON(), server_default=sa.text("'{}'"), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.ForeignKeyConstraint(['actor_id'], ['users.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='SET NULL'),
@@ -133,7 +133,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('agreement_id', sa.Uuid(), nullable=False),
     sa.Column('version_no', sa.Integer(), nullable=False),
-    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('status', sa.String(length=20), server_default=sa.text("'DRAFT'"), nullable=False),
     sa.Column('budget_amount', app.money.Money(), nullable=False),
     sa.Column('created_by', sa.Uuid(), nullable=False),
     sa.Column('freelancer_approved_at', sa.DateTime(timezone=True), nullable=True),
@@ -157,7 +157,7 @@ def upgrade() -> None:
     sa.Column('section_key', sa.String(length=40), nullable=False),
     sa.Column('title', sa.String(length=200), nullable=False),
     sa.Column('body', sa.Text(), nullable=False),
-    sa.Column('ordinal', sa.Integer(), nullable=False),
+    sa.Column('ordinal', sa.Integer(), server_default=sa.text('0'), nullable=False),
     sa.ForeignKeyConstraint(['version_id'], ['agreement_versions.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('version_id', 'section_key', name='uq_section_key')
@@ -168,7 +168,7 @@ def upgrade() -> None:
     sa.Column('base_version_id', sa.Uuid(), nullable=False),
     sa.Column('requested_by', sa.Uuid(), nullable=False),
     sa.Column('raw_text', sa.Text(), nullable=False),
-    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('status', sa.String(length=20), server_default=sa.text("'ANALYSING'"), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.CheckConstraint("status IN ('ANALYSING','PROPOSED','SENT','APPROVED','REJECTED','WITHDRAWN')", name='ck_change_status'),
     sa.ForeignKeyConstraint(['base_version_id'], ['agreement_versions.id'], ondelete='CASCADE'),
@@ -188,7 +188,7 @@ def upgrade() -> None:
     sa.Column('acceptance', sa.JSON(), nullable=False),
     sa.Column('amount', app.money.Money(), nullable=False),
     sa.Column('due_date', sa.Date(), nullable=True),
-    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('status', sa.String(length=20), server_default=sa.text("'PLANNED'"), nullable=False),
     sa.CheckConstraint("status IN ('PLANNED','REQUESTED','PAID','CANCELLED')", name='ck_milestone_status'),
     sa.CheckConstraint('amount > 0', name='ck_milestone_amount_positive'),
     sa.ForeignKeyConstraint(['version_id'], ['agreement_versions.id'], ondelete='CASCADE'),

@@ -13,12 +13,12 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+import app.models  # noqa: F401  # importing the registry populates Base.metadata
 from app.config import settings
 from app.database import Base
 
-# Importing the registry populates Base.metadata. Without this line
-# autogenerate produces an empty migration.
-import app.models  # noqa: F401
+# Without the `app.models` import above, autogenerate produces an empty
+# migration: Base.metadata would know no tables.
 
 config = context.config
 

@@ -36,6 +36,16 @@ Rule for the build: an assumption that turns out false must change the documents
 | **Fallback already implemented** | Clearing reuses an existing `CREATED` order for the same milestone rather than creating a second, and `payments.idempotency_key` is `UNIQUE`. Correctness does not depend on the header. |
 | **Severity** | Low — a convenience, not a control |
 
+### A-13 — Storing merchant credentials yields a merchant id
+
+| | |
+|---|---|
+| **Assumption** | Exchanging a freelancer's `client_id` / `client_secret` for a token exposes their PayPal merchant id, so `merchant_accounts.paypal_merchant_id` can be filled at connect time |
+| **Status** | **Unconfirmed.** Nothing in 04 documents this: the only payee-identifier claim in the feasibility report concerns the *capture* response (A-2), not the token exchange |
+| **How to close** | Same session as A-2: inspect the token response and the first capture; if neither carries an id, the column stays `NULL` |
+| **If false** | `merchant_accounts.paypal_merchant_id` is populated from the first verified capture instead, and the connect screen simply does not show an id. 08 §9 is written to allow both. |
+| **Severity** | Low for the build, medium for wording — it must not be described as "we verify the merchant at connect time" |
+
 ## 2. Provider assumptions
 
 ### A-4 — Gemini model availability and free-tier limits

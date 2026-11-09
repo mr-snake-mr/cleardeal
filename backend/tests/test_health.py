@@ -20,11 +20,24 @@ def test_health_reports_degraded_when_db_ping_fails(client, monkeypatch):
     """If ping() were deleted and "ok" hardcoded, this test fails."""
     monkeypatch.setattr(routers.health, "ping", lambda _db: False)
 
-    body = client.get("/health").json()
+    r = client.get("/health")
 
+    assert r.status_code == 503, "a not-ready service must not answer 200"
+    body = r.json()
     assert body["status"] == "degraded"
     assert body["db"] == "unreachable"
     assert body["migrations"] == "unknown"
+
+
+def test_health_reports_503_when_migrations_are_pending(client, monkeypatch):
+    """A reachable but unmigrated database is not ready — it will fail every
+    request that touches a table."""
+    monkeypatch.setattr(routers.health, "migration_state", lambda _db: "pending")
+
+    r = client.get("/health")
+
+    assert r.status_code == 503
+    assert r.json()["migrations"] == "pending"
 
 
 def test_health_reads_paypal_env_from_settings(client, monkeypatch):

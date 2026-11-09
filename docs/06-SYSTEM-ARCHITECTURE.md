@@ -155,7 +155,7 @@ Serving the SPA from the API's static mount removes CORS from the demo path enti
 | Config | Pydantic `Settings`, `.env` in dev, env vars in deploy. `paypal_env` is `Literal["sandbox","live"]` so a typo cannot create a third mode. |
 | Migrations | Alembic, autogenerate, `render_as_batch=True` for SQLite. Applied on deploy, verified at startup by `migration_state()`. |
 | Secrets | Environment only. `merchant_accounts` stores AES-GCM ciphertext, never plaintext, never returned by any endpoint. |
-| Health | `GET /api/v1/health` reports db reachability, migration state, `paypal_env`. Never reports "ok" for an unreadable database. |
+| Health | `GET /health` — outside the API prefix — reports db reachability, migration state, `paypal_env`, and answers **`503`** when not ready. Never reports "ok" for an unreadable database. |
 
 ## 8. What is deliberately not here
 

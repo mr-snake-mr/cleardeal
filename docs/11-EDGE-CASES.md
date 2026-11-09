@@ -2,7 +2,13 @@
 
 Every row is a behaviour the build must produce, and the test that proves it. A row without a test is a wish.
 
-Legend — **T** = unit/integration test id in `backend/tests/`, **E** = Playwright scenario in doc 12.
+Legend — **T** = the test that proves the row. **E** = the Playwright scenario in [12](12-TESTING-STRATEGY.md) §4, `E1`–`E9`.
+
+**Read this before trusting the T column.** At the 09-NOV rebuild, six of the named tests exist:
+
+`test_budget_must_be_positive` (I-1, I-2) · `test_only_one_active_payment_per_milestone` (P-2) · `test_money_round_trips_without_drift` (I-4) · `test_money_records_block_project_deletion` (D-1) · `test_audit_events_survive_project_deletion` (D-3) · `test_foreign_key_enforcement_is_actually_on` (D-7).
+
+Every other id is **the name the test will have when its block in [13](13-SCHEDULE.md) runs**. That is a specification, not evidence. Presenting a named-but-unwritten test as proof is the exact failure this dossier exists to prevent, so it is stated here rather than discovered by a reader.
 
 ## 1. Input and validation
 
@@ -11,35 +17,35 @@ Legend — **T** = unit/integration test id in `backend/tests/`, **E** = Playwri
 | I-1 | Budget `0` | `422`, no project row | T-`test_budget_must_be_positive` |
 | I-2 | Budget `-5` | `422`, no project row | T-`test_budget_must_be_positive` |
 | I-3 | Budget `"300.001"` | `422` — three decimals is not money | T-`test_budget_rejects_sub_cent` |
-| I-4 | Budget as JSON number `300.1` | accepted, stored as exactly `300.10`, never `300.09999` | T-`test_money_round_trip` |
+| I-4 | Budget as JSON number `300.1` | accepted, stored as exactly `300.10`, never `300.09999` | T-`test_money_round_trips_without_drift` |
 | I-5 | Brief of 1 character | `422` — minimum 20 chars; a one-word brief cannot be analysed | T-`test_brief_minimum_length` |
 | I-6 | Brief of 100 000 chars | `422` with a clear limit, not a 500 and not a truncated analysis | T-`test_brief_maximum_length` |
 | I-7 | Email `"not an email"` | `422` | T-`test_invalid_email_rejected` |
 | I-8 | Deadline in the past | `422` — a project cannot be due yesterday | T-`test_deadline_must_be_future` |
-| I-9 | Unknown field `amount` on payment creation | `422` (`extra="forbid"`), not silently ignored | E-S-5 |
+| I-9 | Unknown field `amount` on payment creation | `422` (`extra="forbid"`), not silently ignored | E9 |
 | I-10 | Unicode brief (emoji, RTL, CJK) | stored and rendered without mojibake | T-`test_unicode_brief_round_trip` |
-| I-11 | Brief containing `<script>alert(1)</script>` | rendered as text, never executed | E-`xss-in-brief` |
+| I-11 | Brief containing `<script>alert(1)</script>` | rendered as text, never executed | manual sweep (12 §8) |
 | I-12 | Duplicate project name for the same owner | allowed — names are not identity | T-`test_duplicate_project_name_allowed` |
 
 ## 2. AI
 
 | # | Case | Required behaviour | Proof |
 |---|---|---|---|
-| A-1 | Provider returns valid JSON with a bad enum | item rejected, `502 AI_INVALID_OUTPUT`, nothing persisted | T-`test_schema_violation_rejected` |
-| A-2 | Provider returns prose around the JSON | parse fails, one retry, then `502`; no partial write | T-`test_prose_wrapped_output_rejected` |
-| A-3 | Provider times out | `503 AI_UNAVAILABLE`, project stays `DRAFT`, retry offered | T-`test_ai_timeout_leaves_no_state` |
-| A-4 | Provider returns 500 twice | one retry then `503`; exactly two calls, no loop | T-`test_single_retry_then_fail` |
-| A-5 | Milestone sum ≠ budget from M2 | generation rejected, delta returned, no version created | T-`test_milestone_sum_enforced_on_generate` |
-| A-6 | M3 cites a `section_key` that does not exist | item downgraded to `NEEDS_CLARIFICATION` | T-`test_unknown_section_key_downgrades` |
-| A-7 | M3 cites a real key with a quote **not** in the body | downgraded; the fabricated quote is discarded | T-`test_quote_not_in_body_downgrades` |
-| A-8 | M3 cites a real key, quote differs only in whitespace/newlines | normalised before comparison, **accepted** — a false downgrade is also a bug | T-`test_quote_whitespace_normalised` |
-| A-9 | M3 returns zero items for a non-empty request | `502 AI_INVALID_OUTPUT` — an empty answer to a real question is a failure | T-`test_empty_classification_rejected` |
-| A-10 | Mixed request: one included, one out of scope, one unclear | three items, each classified independently | E-`mixed-request` |
-| A-11 | `ALREADY_INCLUDED` item with a cost | cost forced to `null` server-side | T-`test_included_item_cost_nulled` |
-| A-12 | Model invents a confidence of `0.91` | schema rejects; only `high/medium/low` accepted | T-`test_numeric_confidence_rejected` |
-| A-13 | Prompt-injection text inside a change request | classification still resolves or downgrades; never approves | E-S-9 |
-| A-14 | Two concurrent M3 calls on one change request | one wins the state transition, the other `409` | T-`test_concurrent_analysis_conflict` |
-| A-15 | `ai_runs` row written for every call, including failures | count matches provider call count | T-`test_every_call_logged` |
+| AI-1 | Provider returns valid JSON with a bad enum | item rejected, `502 AI_INVALID_OUTPUT`, nothing persisted | T-`test_schema_violation_rejected` |
+| AI-2 | Provider returns prose around the JSON | parse fails, one retry, then `502`; no partial write | T-`test_prose_wrapped_output_rejected` |
+| AI-3 | Provider times out | `503 AI_UNAVAILABLE`, project stays `DRAFT`, retry offered | T-`test_ai_timeout_leaves_no_state` |
+| AI-4 | Provider returns 500 twice | one retry then `503`; exactly two calls, no loop | T-`test_single_retry_then_fail` |
+| AI-5 | Milestone sum ≠ budget from M2 | generation rejected, delta returned, no version created | T-`test_milestone_sum_enforced_on_generate` |
+| AI-6 | M3 cites a `section_key` that does not exist | item downgraded to `NEEDS_CLARIFICATION` | T-`test_unknown_section_key_downgrades` |
+| AI-7 | M3 cites a real key with a quote **not** in the body | downgraded; the fabricated quote is discarded | T-`test_quote_not_in_body_downgrades` |
+| AI-8 | M3 cites a real key, quote differs only in whitespace/newlines | normalised before comparison, **accepted** — a false downgrade is also a bug | T-`test_quote_whitespace_normalised` |
+| AI-9 | M3 returns zero items for a non-empty request | `502 AI_INVALID_OUTPUT` — an empty answer to a real question is a failure | T-`test_empty_classification_rejected` |
+| AI-10 | Mixed request: one included, one out of scope, one unclear | three items, each classified independently | E5 |
+| AI-11 | `ALREADY_INCLUDED` item with a cost | cost forced to `null` server-side | T-`test_included_item_cost_nulled` |
+| AI-12 | Model invents a confidence of `0.91` | schema rejects; only `high/medium/low` accepted | T-`test_numeric_confidence_rejected` |
+| AI-13 | Prompt-injection text inside a change request | classification still resolves or downgrades; never approves | E5 |
+| AI-14 | Two concurrent M3 calls on one change request | one wins the state transition, the other `409` | T-`test_concurrent_analysis_conflict` |
+| AI-15 | `ai_runs` row written for every call, including failures | count matches provider call count | T-`test_every_call_logged` |
 
 ## 3. Agreement and versions
 
@@ -48,7 +54,7 @@ Legend — **T** = unit/integration test id in `backend/tests/`, **E** = Playwri
 | G-1 | Send with sum ≠ budget | `409 MILESTONE_SUM_MISMATCH`, status unchanged | T-`test_send_blocked_on_mismatch` |
 | G-2 | Send with zero milestones | `422` | T-`test_send_requires_milestone` |
 | G-3 | Patch an `APPROVED` version | `409`, zero mutation | T-`test_approved_version_is_immutable` |
-| G-4 | Approve v1 when v2 exists | `409 STALE_VERSION` | E-`stale-approval` |
+| G-4 | Approve v1 when v2 exists | `409 STALE_VERSION` | E8 |
 | G-5 | Approve twice with the same user | second is `409`, `client_approved_at` not overwritten | T-`test_double_approval_rejected` |
 | G-6 | Freelancer approves, client approves | `APPROVED`, both timestamps set, `content_hash` stable | T-`test_dual_approval_sets_both_stamps` |
 | G-7 | Sections edited between approvals | rejected — the hash covers sections, so a mid-flight edit is a state error, not a silent divergence | T-`test_edit_between_approvals_rejected` |
@@ -61,7 +67,7 @@ Legend — **T** = unit/integration test id in `backend/tests/`, **E** = Playwri
 | # | Case | Required behaviour | Proof |
 |---|---|---|---|
 | P-1 | Payment created twice with the same `Idempotency-Key` | one row, one order, second is `200` | T-`test_idempotent_payment_creation` |
-| P-2 | Two live payments for one milestone | `409 PAYMENT_ALREADY_ACTIVE` (partial unique index) | T-`test_one_active_payment_per_milestone` |
+| P-2 | Two live payments for one milestone | `409 PAYMENT_ALREADY_ACTIVE` (partial unique index) | T-`test_only_one_active_payment_per_milestone` |
 | P-3 | Milestone already `PAID` | `409` — no second payment | T-`test_paid_milestone_cannot_be_recharged` |
 | P-4 | Capture on a `CAPTURED` payment | `409 PAYMENT_STATE_INVALID` | T-`test_double_capture_rejected` |
 | P-5 | Capture returns `COMPLETED` but amount differs | `409 RECONCILIATION_REQUIRED`, `captured_at` stays null | T-`test_amount_mismatch_blocks_capture` |
@@ -70,7 +76,7 @@ Legend — **T** = unit/integration test id in `backend/tests/`, **E** = Playwri
 | P-8 | Capture succeeds, DB write fails | payment converges from the webhook; no duplicate row | T-`test_capture_db_failure_converges_from_webhook` |
 | P-9 | No connected merchant, Model B | `409 MERCHANT_NOT_CONNECTED`, no order attempted | T-`test_payment_requires_connected_merchant` |
 | P-10 | Merchant credentials revoked at PayPal | `400 INVALID_CREDENTIALS`, merchant row → `INVALID`, clear UI | T-`test_invalid_merchant_credentials_marked` |
-| P-11 | `paypal_order_id` tampered in the capture request | `409`, nothing captured | E-S-4 |
+| P-11 | `paypal_order_id` tampered in the capture request | `409`, nothing captured | E9 |
 | P-12 | Amount `0.01` | allowed and exact — a one-cent invoice is valid money | T-`test_one_cent_payment_exact` |
 
 ## 5. Webhooks
@@ -101,12 +107,12 @@ Legend — **T** = unit/integration test id in `backend/tests/`, **E** = Playwri
 
 | # | Case | Required behaviour | Proof |
 |---|---|---|---|
-| D-1 | Delete a project with payments | refused (`ON DELETE RESTRICT`), `409` | T-`test_project_with_payments_undeletable` |
+| D-1 | Delete a project with payments | refused (`ON DELETE RESTRICT`), `409` | T-`test_money_records_block_project_deletion` |
 | D-2 | Delete a project without payments | cascades agreements, versions, sections, milestones, changes | T-`test_project_cascade` |
 | D-3 | Delete a project with audit rows | audit rows survive with `project_id = NULL` | T-`test_audit_events_survive_project_deletion` |
 | D-4 | Delete an `ai_runs` project | run rows survive with `project_id = NULL` | T-`test_ai_runs_survive_project_deletion` |
-| D-5 | Fresh database, no migrations applied | health reports `migrations: "pending"`, `503`, app still boots | T-`test_health_reports_pending_migration` |
-| D-6 | Database file deleted underneath a running process | health reports `error`, not "ok" and not "pending" | T-`test_health_reports_database_error` |
+| D-5 | Fresh database, no migrations applied | health reports `migrations: "pending"` with HTTP `503`, and the app still boots | T-`test_health_reports_503_when_migrations_are_pending` |
+| D-6 | Database file deleted underneath a running process | health reports `error`, not "ok" and not "pending" | T-`test_health_reports_degraded_when_db_ping_fails` |
 | D-7 | Foreign key enforced on a fresh connection | pragma actually on; a violating insert raises | T-`test_foreign_key_enforcement_is_actually_on` |
 
 ## 8. Auth and authorisation
@@ -117,8 +123,8 @@ Legend — **T** = unit/integration test id in `backend/tests/`, **E** = Playwri
 | S-2 | Six wrong passwords | `401` each; rate limit engages at 10/min | T-`test_login_rate_limited` |
 | S-3 | Expired magic link | `410`, clear message, no session | T-`test_expired_invitation_rejected` |
 | S-4 | Magic link used twice | second use `410` | T-`test_invitation_single_use` |
-| S-5 | Review session calls a workspace endpoint | `401` | E-S-7 |
-| S-6 | User B reads user A's project | `404`, not `403` | E-S-6 |
+| S-5 | Review session calls a workspace endpoint | `401` | manual sweep (12 §8) |
+| S-6 | User B reads user A's project | `404`, not `403` | manual sweep (12 §8) |
 | S-7 | No session at all | `401` on every non-public route | T-`test_unauthenticated_rejected` |
 
 ## 9. UI states

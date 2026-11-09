@@ -124,7 +124,7 @@ CREATE TABLE milestones (
 
 `agreement_sections` is the reason the whole product is defensible. A stable `section_key` per version lets the AI cite something that can be resolved to a foreign key, and lets the service verify that the quoted text genuinely appears in that section. Without stable section identity, scope comparison is an opinion.
 
-Version immutability is a rule, not a constraint: once `status = 'APPROVED'`, no service method mutates the row or its sections. It is enforced in `services/agreements.py` and proven by `test_approved_version_is_immutable`.
+Version immutability is a rule, not a constraint: once `status = 'APPROVED'`, no service method mutates the row or its sections. It will be enforced in `services/agreements.py` (Block 2.5) and proven by `test_approved_version_is_immutable`. **Neither exists yet** — no `services/` module has been written, so this paragraph is a specification, not evidence.
 
 ```
 DRAFT ──send──> PENDING_CLIENT ──both approve──> APPROVED ──new version──> SUPERSEDED
@@ -134,7 +134,9 @@ DRAFT ──send──> PENDING_CLIENT ──both approve──> APPROVED ──
 
 ## 4. Indexes
 
-Eight declared indexes beyond the implicit unique/PK ones. All are plain column lists — **none uses an expression**.
+Eight indexes are declared explicitly by name. Three more are created implicitly by `index=True` on a column — `ix_users_email`, `ix_invitations_project_id`, `ix_ai_runs_project_id` — for **11 `create_index` calls** in the generated migration. All are plain column lists; **none uses an expression**.
+
+The eight named ones:
 
 ```sql
 CREATE INDEX idx_projects_owner       ON projects (owner_id, created_at);
@@ -197,7 +199,7 @@ The obvious constraint would be `json_array_length(evidence) > 0` unless `classi
 - `json_array_length` behaves differently on SQLite and Postgres for non-array values.
 - A `CHECK` can assert the array is non-empty; it cannot assert the quoted text appears in a section body — that is a cross-table containment test.
 
-A dialect-dependent constraint that only catches half the failure is worse than an explicit, unit-tested service rule. The rule lives in `services/scope.py::validate_evidence`, and `test_unresolvable_evidence_downgrades_the_item` proves it fires.
+A dialect-dependent constraint that only catches half the failure is worse than an explicit, unit-tested service rule. The rule will live in `services/scope.py::validate_evidence` (Block 2.6), proven by `test_unresolvable_evidence_downgrades_the_item`. **Neither exists yet**; this is the specification for that block, not a description of shipped code.
 
 ## 6. Money
 
@@ -279,6 +281,7 @@ CREATE TABLE ai_runs (
     validation_status VARCHAR(30) NOT NULL DEFAULT 'pending',
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX ix_ai_runs_project_id ON ai_runs (project_id);
 ```
 
 `webhook_events.event_id` as the primary key is the whole idempotency design: PayPal retries a failed delivery up to 25 times over three days, so the `INSERT` *is* the duplicate check. A conflict returns `200` and a second financial row is never written.
@@ -307,7 +310,7 @@ def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
     cursor.close()
 ```
 
-**SQLite ignores foreign keys unless this runs on every connection.** Without it, every `ON DELETE RESTRICT` and `ON DELETE CASCADE` in this document is decorative. `test_foreign_key_enforcement_is_actually_on` attempts a violating insert and asserts it raises — if the pragma ever stops being applied, that test fails before any data is lost.
+**SQLite ignores foreign keys unless this runs on every connection.** Without it, every `ON DELETE RESTRICT` and `ON DELETE CASCADE` in this document is decorative. `test_foreign_key_enforcement_is_actually_on` asserts the pragma reads `1` **and** attempts an insert whose `owner_id` does not exist, expecting `IntegrityError` — reading the pragma alone would not catch enforcement being off on a different connection.
 
 Alembic runs with `render_as_batch=True` for this dialect, since SQLite cannot `ALTER` most columns; the setting is a no-op on Postgres.
 
@@ -321,4 +324,12 @@ Three failures hit this project and are now guarded:
 | Autogenerate diffs against the **live DB**, so deleting a revision file chains onto a stale `down_revision` | regenerate only from an empty database, and assert `down_revision is None` on the initial revision |
 | Autogenerate emits `app.money.Money()` without importing it → `NameError` | `import app.money` is in `script.py.mako`, so every generated file carries it |
 
-Proof of the current schema: `upgrade head` → `downgrade base` → `upgrade head`, all clean, 14 `create_table` and 11 `create_index` calls in `migrations/versions/166edfd6f11e_initial_schema.py`, and 48 passing tests including `test_declared_indexes_exist_in_the_database` as a drift guard.
+Proof of the current schema: `upgrade head` → `downgrade base` → `upgrade head`, all clean; 14 `create_table` and 11 `create_index` calls in `migrations/versions/190a4bb0fc86_initial_schema.py` with `down_revision = None`; 49 passing tests including `test_declared_indexes_exist_in_the_database` as a drift guard.
+
+## 11. Server defaults
+
+Six columns carry a SQL `DEFAULT`, not only a Python-side `default=`: `agreement_versions.status`, `agreement_sections.ordinal`, `milestones.status`, `change_requests.status`, `audit_events.payload`, `ai_runs.validation_status`.
+
+The distinction matters because a Python default applies only to ORM inserts. A migration script, a `psql` statement, or a future background job would otherwise be free to create a row with a `NULL` status — and the `CHECK (status IN (...))` constraints would not stop it, because `NULL` satisfies none of them but also violates nothing. The DDL default is the one that holds.
+
+An earlier draft of this document declared these defaults while the models did not emit them. That was a document describing a schema that did not exist; both were brought into line by adding `server_default` to the models and regenerating the migration from an empty database.

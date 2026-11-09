@@ -14,7 +14,7 @@ claim.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -45,7 +45,9 @@ class AuditEvent(Base):
         ForeignKey("users.id", ondelete="SET NULL"), default=None
     )
     event_type: Mapped[str] = mapped_column(String(60))
-    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    payload: Mapped[dict] = mapped_column(
+        JSON, default=dict, server_default=text("'{}'")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -70,5 +72,7 @@ class AiRun(Base):
     input_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
     output_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
     latency_ms: Mapped[int | None] = mapped_column(Integer, default=None)
-    validation_status: Mapped[str] = mapped_column(String(30), default="pending")
+    validation_status: Mapped[str] = mapped_column(
+        String(30), default="pending", server_default=text("'pending'")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

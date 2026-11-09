@@ -147,11 +147,29 @@ def test_migration_is_applied():
     assert revision, "alembic_version is empty — migrations did not run"
 
 
-def test_foreign_key_enforcement_is_actually_on():
+def test_foreign_key_enforcement_is_actually_on(db):
     """SQLite ignores FKs by default. If the pragma listener regresses, every
-    cascade and restrict policy in this schema silently stops working."""
+    cascade and restrict policy in this schema silently stops working.
+
+    Reading the pragma alone is not enough: a connection-level pragma can be on
+    while enforcement is off elsewhere. So this also attempts the insert that a
+    disabled pragma would allow.
+    """
     with engine.connect() as conn:
         assert conn.execute(text("PRAGMA foreign_keys")).scalar() == 1
+
+    # Negative control: a project pointing at a user that does not exist.
+    orphan = Project(
+        owner_id=uuid.uuid4(),
+        name="orphan",
+        client_email="orphan@example.test",
+        brief="A brief that is long enough to be plausible for an orphan row.",
+        budget_amount=Decimal("100.00"),
+    )
+    with pytest.raises(IntegrityError):
+        db.add(orphan)
+        db.flush()
+    db.rollback()
 
 
 def test_declared_indexes_exist_in_the_database():

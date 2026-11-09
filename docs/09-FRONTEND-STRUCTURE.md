@@ -180,7 +180,7 @@ No region may render `null` while loading. A blank area during a demo reads as "
 `PayButton` does three things and is honest about all of them:
 
 1. Calls `POST /milestones/{id}/payment` with an `Idempotency-Key` (generated once per mount with `crypto.randomUUID()`, stored in a ref — not per click).
-2. Loads the PayPal JS SDK with the returned order id and the merchant's `client_id`, renders the button.
+2. Loads the PayPal JS SDK with the returned `paypal_order_id` and `paypal_client_id` (08 §5 — the client id is public by PayPal's design; the secret never leaves the server), renders the button.
 3. On approval, calls `capture` and then renders `PaymentStatus`.
 
 `PaymentStatus` for `CAPTURED` shows: amount, milestone title, capture id, and — **only when present** — the verified payee merchant id labelled "Paid to (PayPal-verified)".
@@ -213,6 +213,8 @@ If `payee_merchant_id` is null (assumption A-2 unconfirmed), the component does 
   }
 }
 ```
+
+This block is the **planned** `package.json` for Block 3.1 — `frontend/` is not scaffolded yet, so nothing here is installed.
 
 **Only scripts whose tooling is actually installed.** An earlier version of this file declared `lint` and `test` that pointed at tools not in `devDependencies`; both were deleted rather than left as decoration. If Playwright is added for the E2E suite (12), `test:e2e` appears in the same commit that adds `@playwright/test`.
 

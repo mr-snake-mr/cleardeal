@@ -31,6 +31,8 @@ Two rules that hold for every endpoint below:
 | `MILESTONE_SUM_MISMATCH` | 409 | `sum(milestones) != budget`; `details.delta` |
 | `PAYMENT_ALREADY_ACTIVE` | 409 | A `CREATED`/`APPROVED` payment exists for this milestone |
 | `PAYMENT_STATE_INVALID` | 409 | Capture attempted on a non-capturable payment |
+| `MERCHANT_NOT_CONNECTED` | 409 | No merchant credentials bound for this freelancer |
+| `INVALID_CREDENTIALS` | 400 | Merchant credentials rejected by PayPal; nothing stored |
 | `RECONCILIATION_REQUIRED` | 409 | PayPal disagrees with our record; **not** a retryable error |
 | `AI_UNAVAILABLE` | 503 | Provider timeout or 5xx after one retry |
 | `AI_INVALID_OUTPUT` | 502 | Model returned unparseable or schema-violating output |
@@ -118,7 +120,7 @@ A `PATCH` against a non-`DRAFT` version is `409 CONFLICT`, not a silent no-op. A
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
-| POST | `/milestones/{milestone_id}/payment` | `{}` + `Idempotency-Key` header | `201 {payment_id, paypal_order_id, approve_url}` |
+| POST | `/milestones/{milestone_id}/payment` | `{}` + `Idempotency-Key` header | `201 {payment_id, paypal_order_id, paypal_client_id, approve_url}` |
 | GET | `/payments/{payment_id}` | — | `200 {payment}` |
 | POST | `/payments/{payment_id}/capture` | `{paypal_order_id}` | `200 {payment}` |
 
@@ -134,7 +136,9 @@ Idempotency-Key: 7f3a-0001
 - Amount is read from `milestones.amount` **inside the transaction**. The body has no amount field, so there is nothing to tamper with.
 - The same `Idempotency-Key` returns the existing payment with `200`, not a second order. The key is `UNIQUE` in the database, so a race loses at the constraint rather than in application logic.
 - A second *live* payment for the same milestone violates `uq_payments_active_per_milestone` → `409 PAYMENT_ALREADY_ACTIVE`.
-- No connected merchant → `409 CONFLICT` with `details.code = "MERCHANT_NOT_CONNECTED"`.
+- No connected merchant → `409 MERCHANT_NOT_CONNECTED`.
+
+`paypal_client_id` is returned because the browser-side JS SDK needs it to render the button. It is a **public** identifier by PayPal's own design — the secret is the other half of the pair and never leaves the server. Returning it is not a disclosure; omitting it would make the frontend depend on a value no endpoint supplies.
 
 ### Capture
 
@@ -148,10 +152,10 @@ Server sequence, in order, no shortcuts:
 1. Payment must be `CREATED` or `APPROVED` → else `409 PAYMENT_STATE_INVALID`.
 2. `paypal_order_id` must match the stored one → else `409 CONFLICT`.
 3. `POST /v2/checkout/orders/{id}/capture` with the **merchant's** credentials.
-4. Assert `status == "COMPLETED"`, amount, currency, order id, and payee merchant id.
+4. Assert `status == "COMPLETED"`, amount, currency, and order id. Assert the payee merchant id **only if the response carries one** — its presence is assumption A-2 (16 §1) and has not been observed yet. A missing payee field is recorded in the audit payload and does **not** block the capture; a *mismatched* payee does.
 5. Only then: `CAPTURED` + `captured_at` + `paypal_capture_id` + audit event.
 
-Any assertion failure → `409 RECONCILIATION_REQUIRED`, `captured_at` stays `NULL`, the paid UI is blocked. A successful capture whose database write fails converges from the webhook; it is never re-captured.
+Any assertion failure → `409 RECONCILIATION_REQUIRED`, `captured_at` stays `NULL`, the paid UI is blocked. The absent-payee case is deliberately not in that set: making `CAPTURED` unreachable if A-2 turns out false would break the demo path over a cosmetic field. A successful capture whose database write fails converges from the webhook; it is never re-captured.
 
 ## 6. Scope checks and change requests
 
@@ -237,7 +241,9 @@ A `2xx` is returned only after verification. Returning `200` to an unverified bo
 
 The response contains **no secret field at all** — not masked, not truncated, absent. A masked secret is still a leak of its length and prefix.
 
-On `PUT`, the server obtains a token with the supplied credentials and stores the resolved `paypal_merchant_id`. Invalid credentials → `400` with `details.code = "INVALID_CREDENTIALS"`, nothing stored.
+On `PUT`, the server obtains a token with the supplied credentials to prove they work, then stores them. Invalid credentials → `400 INVALID_CREDENTIALS`, nothing stored.
+
+`paypal_merchant_id` is populated **if PayPal exposes it** during that token exchange; if it does not, the column stays `NULL` until the first verified capture supplies a payee. That is assumption A-13, not a documented capability — the only payee-identifier claim in 04 is about the capture response (A-2), and this endpoint does not get to assume more than the source document supports.
 
 ## 10. Health
 
@@ -246,10 +252,14 @@ On `PUT`, the server obtains a token with the supplied credentials and stores th
 | GET | `/health` | `200` or `503` |
 
 ```json
-{ "status": "ok", "database": "ok", "migrations": "166edfd6f11e", "paypal_env": "sandbox" }
+{ "status": "ok", "db": "ok", "migrations": "190a4bb0fc86", "version": "0.1.0", "paypal_env": "sandbox" }
 ```
 
-`migrations` reports `"pending"` (no revision table), `"none"` (table present, empty), `"<revision>"`, or `"error"` (unreadable). The distinction exists because treating an unreadable database as "pending" sends an operator to run migrations during an outage instead of investigating it. `status` is `503` when the database is unreachable or migrations are `pending`.
+`migrations` reports `"pending"` (no revision table), `"none"` (table present, empty), `"<revision>"`, `"error"` (the table exists but cannot be read), or `"unknown"` (the database itself is unreachable). The distinction exists because treating an unreadable database as "pending" sends an operator to run migrations during an outage instead of investigating it.
+
+**The status code is `503` whenever `status` is `degraded`** — that is, when the database is unreachable or migrations are `pending`. A probe that answers `200` while the database is down keeps an orchestrator routing traffic to a service that cannot serve it. `status` and `db` carry the detail; the code carries the decision.
+
+The probe is mounted at **`/health`**, outside the `/api/v1` prefix, because it is infrastructure rather than part of the public API contract. `/api/v1/health` returns `404`.
 
 ## 11. Idempotency summary
 

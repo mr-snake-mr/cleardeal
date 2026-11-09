@@ -2,7 +2,7 @@
 
 **The test suite is a claim about behaviour, and every test must be able to fail.** A test that would still pass if the feature were deleted is worse than no test — it manufactures false confidence, which is exactly what a judge probes for.
 
-Current state: **48 tests, 99.04% statement coverage, all green**, including the migration round-trip.
+Current state: **49 tests, 99.05% statement coverage, all green**, `ruff` clean, migration round-trip clean.
 
 ## 1. Pyramid
 
@@ -30,18 +30,19 @@ Coverage is a floor, not a goal: **80% enforced in `pyproject.toml`**, currently
 
 ## 3. The tests that carry the product
 
-These six are the ones to read first. Each maps to a promise made to a judge.
+These five exist today and are the ones to read first. Each maps to a promise made to a judge.
 
 | Test | Promise | Why it can fail |
 |---|---|---|
-| `test_foreign_key_enforcement_is_actually_on` | "Deletion policy is enforced" | SQLite ignores FKs unless `PRAGMA foreign_keys=ON` runs per connection. Attempts a violating insert; without the listener it succeeds and the test fails. |
-| `test_declared_indexes_exist_in_the_database` | "The schema is what the doc says" | Compares declared model indexes against `PRAGMA index_list`. Caught three indexes that Alembic silently skipped because they contained `desc()`. |
-| `test_money_is_stored_as_integer_cents` | "No rounding drift" | Reads the raw SQLite value; a regression to `Float` fails here, and a separate assertion pins the Postgres type string to `NUMERIC (12, 2)`. |
+| `test_foreign_key_enforcement_is_actually_on` | "Deletion policy is enforced" | SQLite ignores FKs unless `PRAGMA foreign_keys=ON` runs per connection. Asserts the pragma reads `1` **and** attempts an insert whose `owner_id` does not exist, expecting `IntegrityError` — without the listener the insert succeeds and the test fails. |
+| `test_declared_indexes_exist_in_the_database` | "The schema is what the doc says" | Compares the eight declared index names against `SELECT name FROM sqlite_master`. An earlier *iteration of this build* lost three indexes this way: Alembic silently skips indexes containing an expression, so they existed in the model and never reached the database. That history is why the models now choose plain ascending order with a comment saying so, and why this test exists. The current repo contains no `desc()` index for the test to catch — the guard is pre-emptive. |
+| `test_money_is_stored_as_integer_cents` | "No rounding drift" | Reads the raw SQLite value; a regression to `Float` fails here, and `test_postgres_column_type_is_numeric_12_2` pins the Postgres type string to `NUMERIC (12, 2)`. |
 | `test_budget_invariant_query_detects_a_violation` | "Sum-check is real" | A **negative control**: deliberately inserts a version whose milestones do not sum to the budget and asserts the audit query finds it. Without this, the query could be `SELECT 0` and every test would still pass. |
 | `test_audit_events_survive_project_deletion` | "The log cannot be erased" | Lets the **database** perform the delete. An earlier version performed the `SET NULL` by hand, so `CASCADE` would also have passed. |
-| `test_quote_not_in_body_downgrades` | "Evidence is verified, not believed" | Feeds a real section key with a fabricated quote; asserts the item downgrades rather than being stored. |
 
-The pattern in all six: **arrange the world so the wrong implementation fails.** That is the only thing that makes a test evidence.
+The pattern in all five: **arrange the world so the wrong implementation fails.** That is the only thing that makes a test evidence.
+
+The sixth, `test_quote_not_in_body_downgrades`, **does not exist yet** — there is no `app/services/` or `app/ai/` module to test. It is the first test to write at Block 2.6, and until it passes, doc 05's central claim is a design rather than a demonstrated property. It is listed here rather than omitted because a plan that hides its most important missing test is not a plan.
 
 ## 4. Nine E2E scenarios
 
@@ -69,26 +70,27 @@ A test suite is only as good as its ability to fail. For each of these, the impl
 |---|---|
 | Delete the FK pragma listener | `test_foreign_key_enforcement_is_actually_on` |
 | Replace `Money` with `Float` | `test_money_is_stored_as_integer_cents` + the Postgres type assertion |
-| Hardcode `ping()` to `True` | health test (uses `monkeypatch.setattr` to force `False`) |
-| Hardcode `migration_state()` to `"pending"` | `test_health_reports_database_error` |
+| Hardcode `ping()` to `True` | `test_health_reports_degraded_when_db_ping_fails` (uses `monkeypatch.setattr` to force `False`) |
+| Hardcode `migration_state()` to `"pending"` | `test_health_reports_503_when_migrations_are_pending` |
+| Return HTTP 200 while degraded | both health tests above — they assert the status code, not just the body |
 | Change `ON DELETE SET NULL` to `CASCADE` | `test_audit_events_survive_project_deletion` |
-| Accept any quote without the substring check | `test_quote_not_in_body_downgrades` |
+| Accept any quote without the substring check | `test_quote_not_in_body_downgrades` — **planned, Block 2.6**; until it exists, nothing catches this |
 | Remove the `desc()` → plain-index fix | `test_declared_indexes_exist_in_the_database` |
 
-This table is the difference between "we have 48 tests" and "we have 48 tests that do something".
+This table is the difference between "we have 49 tests" and "we have 49 tests that do something".
 
 ## 6. Test data
 
-- One fixture builder per aggregate (`make_project`, `make_version`, `make_payment`) with explicit defaults so a test states only what it cares about.
-- Every fixture uses a distinct `uuid4`; nothing relies on insertion order.
-- Destructive tests get their own database file per test (`tmp_path`), so one failure cannot cascade into a false second failure.
-- No shared mutable module-level state; `conftest.py` creates the engine per session and the schema per test.
+- **One database for the whole run**, created by a single `command.upgrade(cfg, "head")` against a session-scoped temp file (`conftest.py`). This is deliberate: the migration is executed once per run and every test then trusts it, rather than each test building its own schema with `create_all()` and proving nothing about what deploys.
+- The `db` fixture yields a session and **rolls back** afterwards, so tests share a schema but not data. A test that commits is a test that leaks.
+- Helper builders (`_user`, `_project`, …) live at the top of `test_schema.py` and use distinct `uuid4` values, so nothing depends on insertion order.
+- No shared mutable module-level state. The trade-off accepted: because the schema is built once, a test that leaves committed rows behind can affect a later test. The rollback fixture is what prevents it; a test that commits is therefore a defect, not a convenience.
 
 ## 7. CI shape
 
 ```
 ruff check .            # style, unused imports, undefined names
-pytest                  # 48 tests, 80% floor enforced
+pytest                  # 49 tests, 80% floor enforced
 alembic upgrade head    # on an empty DB
 alembic downgrade base  # must be clean
 alembic upgrade head    # round-trip must be idempotent
@@ -128,7 +130,7 @@ A-2 in particular: the first real capture either confirms the payee field or for
 Not "the tests pass". A run is green when, in one invocation:
 
 1. `ruff` reports zero issues,
-2. `pytest` reports 48 passed and coverage ≥ 80%,
+2. `pytest` reports 49 passed and coverage ≥ 80%,
 3. the migration round-trip is clean,
 4. `tsc --noEmit` is silent,
 5. `vite build` succeeds,

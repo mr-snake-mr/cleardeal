@@ -9,7 +9,7 @@
 | Area | State | Evidence |
 |---|---|---|
 | Dossier 00–17 | complete | this directory |
-| Backend foundation | Tasks 1–2 done | 48 tests, 99.04% coverage |
+| Backend foundation | blocks 1.1–1.4 done | 49 tests, 99.05% coverage, `ruff` clean |
 | Schema + migration | done | 14 tables, 11 indexes; `upgrade → downgrade → upgrade` clean |
 | Auth, projects, AI, PayPal, frontend | not started | Day 1 blocks 1.5+ per [13](13-SCHEDULE.md) |
 

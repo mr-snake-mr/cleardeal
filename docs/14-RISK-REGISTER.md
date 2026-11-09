@@ -1,6 +1,6 @@
 # Risk Register
 
-Scored 1–5 on likelihood and impact. Anything with impact 5 and likelihood ≥ 3 gets a named mitigation owner and a trigger — a risk without a trigger is a worry, not a control.
+Scored 1–5 on likelihood and impact. Anything with impact 5 and likelihood ≥ 3 gets a named mitigation and an explicit trigger — a risk without a trigger is a worry, not a control. In this build the author and auditor roles from [17](17-EXECUTION-MODEL.md) are the standing owners of every mitigation, so ownership is not repeated per row.
 
 ## Top of register
 
