@@ -1,0 +1,59 @@
+"""Project request and response shapes.
+
+Two boundary rules from docs/08 §3, both enforced here rather than in the
+service:
+
+- `budget_amount` is a decimal string, never a JSON float. A float cannot
+  represent every cent exactly, and a payment system that rounds is a payment
+  system that eventually pays the wrong amount.
+- `extra="forbid"`. A client that posts `amount` or `status` gets a `422`; a
+  silent ignore would look like it worked.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+
+from app.schemas.auth import Email
+
+# Money crosses the wire as a fixed-scale string: "300.00", never 300.0.
+MoneyStr = Annotated[
+    Decimal,
+    PlainSerializer(lambda value: f"{value:.2f}", return_type=str, when_used="json"),
+]
+
+
+class ProjectCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+    client_email: Email
+    # 20 characters is the floor because a one-word brief cannot be analysed;
+    # 100_000 is a boundary check, not a product limit.
+    brief: str = Field(min_length=20, max_length=100_000)
+    budget_amount: Decimal = Field(gt=0, decimal_places=2, max_digits=12)
+    deadline: date | None = None
+
+
+class ProjectOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    client_email: str
+    brief: str
+    budget_amount: MoneyStr
+    currency: str
+    deadline: date | None
+    status: str
+    created_at: datetime
+
+
+class ProjectList(BaseModel):
+    items: list[ProjectOut]
+    total: int

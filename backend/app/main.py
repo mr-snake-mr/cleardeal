@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine
-from app.routers import auth, health
+from app.routers import auth, health, projects
 
 
 @asynccontextmanager
@@ -63,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, tags=["infra"])
 
     app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(projects.router, prefix="/api/v1")
 
     return app
 
