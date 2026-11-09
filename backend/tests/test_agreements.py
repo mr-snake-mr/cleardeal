@@ -312,6 +312,95 @@ def test_reject_cancels_the_version(client, ai):
 # ------------------------------------------------------------------ isolation
 
 
+def test_approve_refuses_a_version_that_no_longer_matches_its_hash(client, ai, db):
+    """`content_hash` is only evidence if something re-checks it. Without this,
+    a milestone could be re-priced after send and the hash would still match
+    nothing that anybody compares."""
+    _signup(client)
+    project = _project(client)
+    version_id = _agreement(client, project["id"]).json()["id"]
+    client.post(f"/api/v1/agreements/{version_id}/send", json={})
+
+    section = db.scalars(
+        select(AgreementSection).where(AgreementSection.version_id == uuid.UUID(version_id))
+    ).one()
+    section.body = "Something else entirely, added after the hash was taken."
+    db.commit()
+
+    response = client.post(
+        f"/api/v1/agreements/{version_id}/approve", json={"role": "freelancer"}
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "CONTENT_CHANGED"
+
+
+def test_get_reports_whether_the_content_still_matches_the_hash(client, ai, db):
+    """The read path recomputes, so a reader is never shown a hash that is
+    silently stale."""
+    _signup(client)
+    project = _project(client)
+    version_id = _agreement(client, project["id"]).json()["id"]
+
+    assert client.get(f"/api/v1/agreements/{version_id}").json()["content_intact"] is True
+
+    section = db.scalars(
+        select(AgreementSection).where(AgreementSection.version_id == uuid.UUID(version_id))
+    ).one()
+    section.body = "Edited underneath the reader."
+    db.commit()
+
+    assert client.get(f"/api/v1/agreements/{version_id}").json()["content_intact"] is False
+
+
+def test_approve_refuses_when_the_milestones_no_longer_sum(client, ai, db):
+    """`send` is not the only gate: a row can change before approval, and
+    APPROVED is the state a payment reads."""
+    _signup(client)
+    project = _project(client)
+    version_id = _agreement(client, project["id"]).json()["id"]
+    client.post(f"/api/v1/agreements/{version_id}/send", json={})
+
+    milestone = db.scalars(
+        select(Milestone).where(Milestone.version_id == uuid.UUID(version_id))
+    ).first()
+    milestone.amount = Decimal("150.00")
+    db.commit()
+
+    response = client.post(f"/api/v1/agreements/{version_id}/approve", json={"role": "client"})
+
+    # The hash moves first, and both refusals are correct; the sum check is the
+    # one that names the money.
+    assert response.status_code == 409
+    assert response.json()["code"] in {"CONTENT_CHANGED", "MILESTONE_SUM_MISMATCH"}
+
+
+def test_a_second_draft_racing_for_the_same_version_number_is_a_409(client, ai, db):
+    """The unique constraint is the real guard; this checks it surfaces as a
+    retryable 409 rather than a 500 with a traceback in the log."""
+    _signup(client)
+    project = _project(client)
+    agreement = Agreement(project_id=uuid.UUID(project["id"]), current_version=0)
+    db.add(agreement)
+    db.flush()
+    db.add(
+        AgreementVersion(
+            agreement_id=agreement.id,
+            version_no=1,
+            status="SUPERSEDED",
+            budget_amount=Decimal("300.00"),
+            created_by=db.scalars(select(User)).one().id,
+            content_hash="0" * 64,
+        )
+    )
+    db.commit()
+
+    response = _agreement(client, project["id"])
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "VERSION_RACE"
+
+
 def test_another_users_agreement_is_404_not_403(client, ai):
     """403 confirms the id exists; the ids are UUID v4 so that they cannot be
     enumerated (docs/10 §2)."""
@@ -323,3 +412,46 @@ def test_another_users_agreement_is_404_not_403(client, ai):
 
     assert client.get(f"/api/v1/agreements/{version_id}").status_code == 404
     assert client.post(f"/api/v1/agreements/{version_id}/send", json={}).status_code == 404
+    assert (
+        client.post(
+            f"/api/v1/agreements/{version_id}/approve", json={"role": "client"}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            f"/api/v1/agreements/{version_id}/reject", json={"reason": "not mine"}
+        ).status_code
+        == 404
+    )
+
+
+def test_dual_approval_is_one_actor_asserting_two_roles_today(client, ai, db):
+    """KNOWN LIMITATION, proved rather than hidden (docs/16 A-11).
+
+    There is no client session yet, so the only caller who can reach these
+    routes is the project owner — and `role` is whatever the request body says.
+    A judge reading the timeline would see two approvals from one account.
+
+    The audit payload says `role_source: "self_asserted"` so the log does not
+    claim the client did it. When client access lands, this test is replaced by
+    one that proves two distinct principals, and this one must fail.
+    """
+    _signup(client)
+    project = _project(client)
+    version_id = _agreement(client, project["id"]).json()["id"]
+    client.post(f"/api/v1/agreements/{version_id}/send", json={})
+
+    client.post(f"/api/v1/agreements/{version_id}/approve", json={"role": "freelancer"})
+    final = client.post(f"/api/v1/agreements/{version_id}/approve", json={"role": "client"})
+
+    assert final.json()["status"] == "APPROVED"
+
+    rows = db.scalars(
+        select(AuditEvent).where(AuditEvent.event_type == "AGREEMENT_APPROVED")
+    ).all()
+    actors = {row.actor_id for row in rows}
+    roles = {row.payload["role"] for row in rows}
+    assert len(roles) == 2
+    assert len(actors) == 1, "the same actor presented both roles"
+    assert {row.payload["role_source"] for row in rows} == {"self_asserted"}

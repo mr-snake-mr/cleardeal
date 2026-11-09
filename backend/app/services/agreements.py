@@ -28,6 +28,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.ai.schemas import AgreementDraft
@@ -67,6 +68,31 @@ class InvalidState(AgreementError):
 class ContentChanged(AgreementError):
     def __init__(self) -> None:
         super().__init__("the rendered content no longer matches the stored hash")
+
+
+class VersionRace(AgreementError):
+    """Two callers drafted at the same time and both took version n+1.
+
+    The unique constraint is the real guard; this turns the violation into a
+    retryable 409 instead of a 500 an operator has to read a traceback to
+    understand. `services/auth.py` does the same for a duplicate email.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("another draft was created at the same time; reload and retry")
+
+
+def _flush_or_race(db: Session) -> None:
+    """Flush, translating a uniqueness violation into a retryable refusal.
+
+    The violation surfaces at `flush()`, which is where SQLAlchemy actually
+    executes the INSERT — catching it at `commit()` would miss it entirely.
+    """
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise VersionRace() from exc
 
 
 class DraftClient(Protocol):
@@ -163,6 +189,9 @@ def content_hash_for(version: AgreementVersion) -> str:
                 "deliverables": m.deliverables,
                 "acceptance": m.acceptance,
                 "amount": f"{m.amount:.2f}",
+                # A due date is part of what was agreed. Leaving it out of the
+                # hash would let it move without the hash noticing.
+                "due_date": m.due_date.isoformat() if m.due_date else None,
             }
             for m in sorted(version.milestones, key=lambda m: m.ordinal)
         ],
@@ -180,7 +209,7 @@ def create_version(
     if agreement is None:
         agreement = Agreement(project_id=project.id, current_version=0)
         db.add(agreement)
-        db.flush()
+        _flush_or_race(db)
 
     if agreement.current_version:
         previous = db.scalars(
@@ -204,7 +233,7 @@ def create_version(
         content_hash="0" * 64,
     )
     db.add(version)
-    db.flush()
+    _flush_or_race(db)
 
     for ordinal, section in enumerate(draft.sections):
         db.add(
@@ -302,6 +331,11 @@ def approve(
     # The document a reader sees must still be the document that was hashed.
     if content_hash_for(version) != version.content_hash:
         raise ContentChanged()
+    # And it must still add up. `send` checked once; a row can change between
+    # the two calls, and APPROVED is the state payments read.
+    total = sum((m.amount for m in version.milestones), start=Decimal("0.00"))
+    if total != version.budget_amount:
+        raise MilestoneSumMismatch(version.budget_amount, total)
 
     if role == "freelancer":
         version.freelancer_approved_at = now
@@ -315,7 +349,15 @@ def approve(
             project_id=_project_id(db, version),
             actor_id=actor_id,
             event_type="AGREEMENT_APPROVED",
-            payload={"version_no": version.version_no, "role": role},
+            payload={
+                "version_no": version.version_no,
+                "role": role,
+                # Honesty about the evidence: the role is asserted by the
+                # caller, not proven by a second session. Without this the log
+                # reads as "the client approved", which is a claim the log
+                # cannot support (docs/16 A-11).
+                "role_source": "self_asserted",
+            },
         )
     )
     db.commit()

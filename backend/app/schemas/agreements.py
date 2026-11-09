@@ -72,6 +72,9 @@ class VersionOut(BaseModel):
     status: str
     budget_amount: MoneyStr
     content_hash: str
+    # Recomputed on every read. A stored hash that nobody re-checks is a number,
+    # not evidence; this is what turns it into something a reader can rely on.
+    content_intact: bool
     created_at: datetime
     freelancer_approved_at: datetime | None
     client_approved_at: datetime | None

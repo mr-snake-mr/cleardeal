@@ -117,6 +117,17 @@ Rule for the build: an assumption that turns out false must change the documents
 | **How to close** | One provider sandbox key and a 20-line sender |
 | **Severity** | Low for judging, medium for honesty — the review page must be reachable in the demo, so the link is copied rather than emailed |
 
+### A-11 — A client approval can be attributed to the client
+
+| | |
+|---|---|
+| **Assumption** | `POST /agreements/{id}/approve` with `{"role": "client"}` represents the client's decision |
+| **Status** | **False today, and enforced as known.** There is no client session: the only caller who can reach the route is the project owner (`Project` has `client_email`, not a client account). So one person can present both roles, and the audit row records `role_source: "self_asserted"` so the log does not claim otherwise |
+| **If false** | The timeline shows two approvals from one account. A judge who notices concludes the dual-approval claim is theatre — which would be correct |
+| **How to close** | Magic-link exchange (block 1.5, unbuilt) plus a distinct actor id per approval, and `approve` refusing a second role from the same actor |
+| **Severity** | High for the claim, low for the demo path — the payment path only needs the version to reach `APPROVED` |
+| **Recorded in code** | `tests/test_agreements.py::test_dual_approval_is_one_actor_asserting_two_roles_today` proves the gap rather than hiding it |
+
 ### A-10 — Judging criteria weights
 
 | | |

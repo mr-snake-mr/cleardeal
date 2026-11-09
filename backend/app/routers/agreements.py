@@ -55,6 +55,7 @@ def _out(version) -> VersionOut:
         status=version.status,
         budget_amount=version.budget_amount,
         content_hash=version.content_hash,
+        content_intact=agreement_service.content_hash_for(version) == version.content_hash,
         created_at=version.created_at,
         freelancer_approved_at=version.freelancer_approved_at,
         client_approved_at=version.client_approved_at,
@@ -122,6 +123,14 @@ def _refusal(exc: agreement_service.AgreementError) -> HTTPException:
                 "details": {"approved_version": exc.approved, "current_version": exc.current},
             },
         )
+    if isinstance(exc, agreement_service.VersionRace):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "VERSION_RACE",
+                "message": "Another draft was created at the same time. Reload and retry.",
+            },
+        )
     if isinstance(exc, agreement_service.ContentChanged):
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -160,9 +169,12 @@ def create_agreement(
     except (AiUnavailable, AiInvalidRequest, AiInvalidOutput) as exc:
         raise _ai_failure(exc) from None
 
-    version = agreement_service.create_version(
-        db, project=project, draft=draft, author_id=user.id
-    )
+    try:
+        version = agreement_service.create_version(
+            db, project=project, draft=draft, author_id=user.id
+        )
+    except agreement_service.VersionRace as exc:
+        raise _refusal(exc) from None
     return _out(version)
 
 
