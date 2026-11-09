@@ -29,6 +29,7 @@ from typing import Protocol
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from app.ai.schema_tools import generation_schema
 from app.config import settings
 
 # Verified 2026-11-09 (docs/05 §7). Used only to report an estimate; nothing
@@ -141,7 +142,9 @@ class GeminiClient:
             )
             raise AiUnavailable("GEMINI_API_KEY is not configured")
 
-        schema_json = schema.model_json_schema()
+        # Not `model_json_schema()`: Gemini rejects deep unions and
+        # wants the documented null idiom (app/ai/schema_tools.py).
+        schema_json = generation_schema(schema)
         digest = prompt_hash(prompt, schema_json)
         payload = self._payload(prompt, schema_json)
         # The key travels in a header, not the query string. In the URL it

@@ -42,6 +42,11 @@ class RequiredField(BaseModel):
     confidence: str
 
 
+class RequiredFieldWithOptional(BaseModel):
+    answer: str
+    quote: str | None = None
+
+
 def _ok(text: str = '{"answer": "yes"}', *, prompt_tokens: int = 100, out_tokens: int = 20) -> dict:
     return {
         "candidates": [{"content": {"parts": [{"text": text}]}}],
@@ -101,6 +106,27 @@ def _client(db, *outcomes, api_key="test-key"):
 
 
 # ------------------------------------------------------------------- success
+
+
+def test_the_payload_sent_to_the_provider_is_flat(db):
+    """The helper is not enough: the client has to use it.
+
+    A `str | None` field in the real schema is what produced `anyOf`, and a 400
+    from the provider would fail every analysis while all fakes stayed green.
+    """
+    captured = {}
+
+    def capture(url, headers, payload):
+        captured["payload"] = payload
+        return _ok()
+
+    client = GeminiClient(api_key="k", model="m", transport=capture, record=make_recorder(db))
+    client.generate(module="m1", prompt="p", schema=RequiredFieldWithOptional)
+
+    sent = json.dumps(captured["payload"]["generationConfig"]["responseSchema"])
+    assert "anyOf" not in sent
+    assert "$ref" not in sent
+    assert "$defs" not in sent
 
 
 def test_a_valid_response_is_returned_as_a_validated_model(db):
