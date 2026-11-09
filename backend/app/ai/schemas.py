@@ -63,3 +63,42 @@ class BriefAnalysis(BaseModel):
     ambiguities: list[Ambiguity] = Field(default_factory=list, max_length=20)
     risks: list[Risk] = Field(default_factory=list, max_length=20)
     assumptions: list[Assumption] = Field(default_factory=list, max_length=20)
+
+
+class SectionDraft(BaseModel):
+    """One addressable part of the agreement.
+
+    `section_key` is the identifier M3 cites against, so it is constrained here:
+    a citation that cannot be resolved to a stored row is not evidence.
+    """
+
+    section_key: str = Field(min_length=2, max_length=40, pattern=r"^[A-Z][A-Z0-9_]*$")
+    title: str = Field(min_length=3, max_length=200)
+    body: str = Field(min_length=10)
+
+
+class MilestoneDraft(BaseModel):
+    """Cents, as an integer.
+
+    docs/05 §4: "Milestone amounts are integers in USD cents." A float amount is
+    the one shape where the sum invariant can fail for a reason nobody can see,
+    so the type makes it unrepresentable rather than validating it later.
+    """
+
+    ordinal: int = Field(ge=1)
+    title: str = Field(min_length=3, max_length=200)
+    deliverables: list[str] = Field(min_length=1, max_length=20)
+    acceptance: list[str] = Field(min_length=1, max_length=20)
+    # `strict=True` is not pedantry. In lax mode the string "10.00" validates as
+    # 10 — a model that answered in dollars would be stored as ten cents, a 100x
+    # error that no sum check downstream could detect.
+    amount_cents: int = Field(gt=0, strict=True)
+
+
+class AgreementDraft(BaseModel):
+    """What M2 returns. The sum rule is not checked here — only the service
+    knows the budget it must be checked against."""
+
+    title: str = Field(min_length=3, max_length=200)
+    sections: list[SectionDraft] = Field(min_length=1, max_length=20)
+    milestones: list[MilestoneDraft] = Field(min_length=1, max_length=20)

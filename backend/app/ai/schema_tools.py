@@ -54,6 +54,9 @@ _DROP_KEYS = {
     "default",
     "$schema",
     "additionalProperties",
+    # Not verified as accepted by `responseSchema`; Pydantic re-checks the same
+    # rule on the way back, so sending it can only lose, never gain.
+    "pattern",
 }
 
 _MAX_INLINE_DEPTH = 8

@@ -138,9 +138,9 @@ def test_no_stripped_key_survives_the_nullable_collapse():
     product's entry point.
     """
     from app.ai.schema_tools import _DROP_KEYS
-    from app.ai.schemas import BriefAnalysis
+    from app.ai.schemas import AgreementDraft, BriefAnalysis
 
-    for model in (Nested, BriefAnalysis):
+    for model in (Nested, BriefAnalysis, AgreementDraft):
         for node in _walk(generation_schema(model)):
             leaked = set(node) & _DROP_KEYS
             assert not leaked, (model.__name__, leaked)

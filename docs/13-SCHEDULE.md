@@ -24,7 +24,7 @@ Dossier 00–17, skill gate established, `git init` before the first file.
 | 1.8 | Boundary test (`routers/` may not import `models/`), ruff clean | `test_boundaries.py` |
 
 **Gate G1:** 70+ tests green, coverage ≥ 80%, migration round-trip clean, audit PASS on Tasks 1–5.
-**Status: blocks 1.1–1.6 and 1.8 complete** — repo, config, `Money`, `database.py`, 14 models, generated migration, schema tests, auth, and project create/list/read with a single error envelope, and a test that enforces the layer boundary (174 tests, 95.58%, round-trip proven). Block 1.7 onward are unstarted.
+**Status (2026-11-09):** 1.1–1.4, 1.7 and 1.8 complete. 1.5 partial — register, login, logout, `me` and signed sessions ship; the magic-link exchange does not. 1.6 partial — create, list and read ship; update and delete do not. Day 2 has started: 2.1 (Gemini client), 2.3 (M1 brief analysis) and 2.4 (M2 agreement draft with the `sum(milestones) == budget` invariant in cents). **186 tests, 95.92%, round-trip clean.** 2.2 and 2.5–2.9 unstarted.
 
 **Risk on Day 1:** this is the highest-risk day because nothing is demoable at the end of it. Resist the urge to jump to the UI; every later day assumes the schema is right.
 
