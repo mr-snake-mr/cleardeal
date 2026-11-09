@@ -13,10 +13,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.ai.client import AiInvalidOutput, AiInvalidRequest, AiUnavailable
+from app.ai.client import get_client as get_ai_client
+from app.ai.schemas import BriefAnalysis
 from app.database import get_db
 from app.routers.auth import CurrentUser
 from app.schemas.projects import ProjectCreate, ProjectList, ProjectOut
+from app.services import analysis as analysis_service
 from app.services import projects as project_service
+from app.services.ai_runs import make_recorder
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -60,3 +65,42 @@ def get_project(project_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Proj
     if project is None:
         raise _not_found()
     return ProjectOut.model_validate(project)
+
+@router.post("/{project_id}/analyse", response_model=BriefAnalysis)
+def analyse_project(project_id: uuid.UUID, user: CurrentUser, db: DbSession) -> BriefAnalysis:
+    """M1. The project moves to ANALYSED only when the analysis succeeded.
+
+    Every failure path leaves the project exactly where it was: a half-analysed
+    project is worse than an unanalysed one, because it looks finished.
+    """
+    project = project_service.get_for_owner(db, owner_id=user.id, project_id=project_id)
+    if project is None:
+        raise _not_found()
+
+    client = get_ai_client(record=make_recorder(db))
+    try:
+        return analysis_service.analyse(db, project=project, client=client)
+    except AiUnavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "AI_UNAVAILABLE",
+                "message": "The analysis service is unavailable. The project was not changed.",
+            },
+        ) from None
+    except AiInvalidRequest:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "code": "AI_INVALID_REQUEST",
+                "message": "The analysis service rejected the request.",
+            },
+        ) from None
+    except AiInvalidOutput:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "code": "AI_INVALID_OUTPUT",
+                "message": "The analysis could not be trusted and was discarded. Try again.",
+            },
+        ) from None

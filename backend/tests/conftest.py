@@ -50,3 +50,58 @@ def client() -> Iterator[TestClient]:
     """
     with TestClient(create_app(), base_url="https://testserver") as c:
         yield c
+
+@pytest.fixture(autouse=True)
+def _clean_database():
+    """Empty every table after each test, children first.
+
+    Each module used to clean up its own rows, and that worked until a module
+    started creating rows another module's cleanup could not delete: `test_auth`
+    deleted users while `test_analysis` had left a project pointing at one, and
+    the foreign key refused. One ordered teardown in one place removes the
+    ordering problem from every test author's head.
+    """
+    from sqlalchemy import delete
+
+    from app.database import SessionLocal
+    from app.models import (
+        Agreement,
+        AgreementSection,
+        AgreementVersion,
+        AiRun,
+        AuditEvent,
+        ChangeItem,
+        ChangeRequest,
+        Invitation,
+        MerchantAccount,
+        Milestone,
+        Payment,
+        Project,
+        User,
+        WebhookEvent,
+    )
+
+    yield
+
+    session = SessionLocal()
+    try:
+        for model in (
+            AuditEvent,
+            AiRun,
+            WebhookEvent,
+            Payment,
+            ChangeItem,
+            ChangeRequest,
+            Milestone,
+            AgreementSection,
+            AgreementVersion,
+            Agreement,
+            Invitation,
+            MerchantAccount,
+            Project,
+            User,
+        ):
+            session.execute(delete(model))
+        session.commit()
+    finally:
+        session.close()
