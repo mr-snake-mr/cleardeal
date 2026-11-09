@@ -108,11 +108,19 @@ def delete(db: Session, *, project: Project, actor_id: uuid.UUID) -> None:
     if held:
         raise ProjectHasPayments()
 
+    # Any signature counts, not only a fully approved version: `approve` records
+    # the freelancer's timestamp while the version is still PENDING_CLIENT, and
+    # deleting that destroys a signature the guard exists to protect.
     signed = db.scalar(
         select(func.count())
         .select_from(AgreementVersion)
         .join(Agreement, AgreementVersion.agreement_id == Agreement.id)
-        .where(Agreement.project_id == project_id, AgreementVersion.status == "APPROVED")
+        .where(
+            Agreement.project_id == project_id,
+            (AgreementVersion.status == "APPROVED")
+            | (AgreementVersion.freelancer_approved_at.is_not(None))
+            | (AgreementVersion.client_approved_at.is_not(None)),
+        )
     )
     if signed:
         raise ProjectHasApprovedAgreement()

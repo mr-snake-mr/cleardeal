@@ -87,8 +87,8 @@ def _accept(db: Session, token: str) -> UserOut:
             detail={
                 "code": "EMAIL_ALREADY_REGISTERED",
                 "message": (
-                    "This address already has an account. Sign in with it to approve; "
-                    "a link cannot stand in for a password."
+                    "This address already has an account. Sign in with that account and "
+                    "approve as the client; the invitation is already recorded against it."
                 ),
             },
         ) from None

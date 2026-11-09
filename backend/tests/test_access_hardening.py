@@ -288,3 +288,87 @@ def test_a_patch_cannot_null_a_required_field(client, db, ai):
     response = client.patch(f"/api/v1/projects/{project['id']}", json={"name": None})
 
     assert response.status_code == 422
+
+
+# ------------------------------------------------- the regression, and its fix
+
+
+def test_a_client_who_already_has_an_account_can_still_sign(client, db, ai):
+    """The fix for the takeover must not lock out the honest case: an existing
+    account signs in with its password and approves as the client."""
+    _signup(client, email="owner@example.test")
+    project, version = _approved(client)
+    client.post(f"/api/v1/agreements/{version['id']}/send", json={})
+
+    # The client registers their own account, then gets invited.
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    with TestClient(create_app(), base_url="https://testserver") as client_client:
+        assert client_client.post(
+            "/api/v1/auth/register",
+            json={"email": CLIENT_EMAIL, "name": "Client", "password": PASSWORD},
+        ).status_code == 201
+        invited = client.post(
+            f"/api/v1/projects/{project['id']}/invitations", json={"email": CLIENT_EMAIL}
+        )
+        token = invited.json()["invite_url"].rsplit("/", 1)[-1]
+        # The link is refused, as designed, and changes no state.
+        assert client_client.post(f"/api/v1/invitations/{token}/accept").status_code == 409
+
+        assert client_client.post(
+            "/api/v1/auth/login",
+            json={"email": CLIENT_EMAIL, "password": PASSWORD},
+        ).status_code == 200
+        client.post(f"/api/v1/agreements/{version['id']}/approve", json={"role": "freelancer"})
+
+        approved = client_client.post(
+            f"/api/v1/agreements/{version['id']}/approve", json={"role": "client"}
+        )
+
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "APPROVED"
+
+
+def test_a_refused_link_creates_no_second_user_row(client, db, ai):
+    _signup(client, email="owner@example.test")
+    project = _project(client)
+
+    # A separate browser, so the owner's session stays the owner's.
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    with TestClient(create_app(), base_url="https://testserver") as other:
+        assert (
+            other.post(
+                "/api/v1/auth/register",
+                json={"email": CLIENT_EMAIL, "name": "Client", "password": PASSWORD},
+            ).status_code
+            == 201
+        )
+
+    invited = client.post(
+        f"/api/v1/projects/{project['id']}/invitations", json={"email": CLIENT_EMAIL}
+    )
+    token = invited.json()["invite_url"].rsplit("/", 1)[-1]
+    client.post(f"/api/v1/invitations/{token}/accept")
+
+    db.expire_all()
+    rows = db.scalars(select(User).where(User.email == CLIENT_EMAIL)).all()
+    assert len(rows) == 1
+
+
+def test_a_partial_signature_also_blocks_deletion(client, db, ai):
+    """`approve` stamps the freelancer while the version is PENDING_CLIENT. That
+    signature is evidence even though the status never reached APPROVED."""
+    _signup(client)
+    project, version = _approved(client)
+    client.post(f"/api/v1/agreements/{version['id']}/send", json={})
+    client.post(f"/api/v1/agreements/{version['id']}/approve", json={"role": "freelancer"})
+
+    response = client.delete(f"/api/v1/projects/{project['id']}")
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "PROJECT_HAS_APPROVED_AGREEMENT"

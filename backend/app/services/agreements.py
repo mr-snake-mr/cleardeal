@@ -331,11 +331,16 @@ def get_for_participant(db: Session, *, version_id: uuid.UUID, actor):
         return None
     if project.owner_id == actor.id:
         return version
-    from app.services.invitations import accepted_for_project
-
-    if accepted_for_project(db, project_id=project.id, email=actor.email) is not None:
-        return version
-    return None
+    # Same rule as `_assert_may_sign`: being the named party is what counts, not
+    # whether the link was clicked. A client with an existing account never can
+    # click it, because accept refuses to mint a session for an existing row.
+    named = db.scalars(
+        select(Invitation).where(
+            Invitation.project_id == project.id,
+            func.lower(Invitation.email) == actor.email.lower(),
+        )
+    ).one_or_none()
+    return version if named is not None else None
 
 
 def send(db: Session, *, version: AgreementVersion, actor_id: uuid.UUID) -> AgreementVersion:
@@ -374,11 +379,15 @@ def _assert_may_sign(db: Session, *, version: AgreementVersion, role: str, actor
     # invitation for this project.
     if actor.id == project.owner_id:
         raise RoleNotYours(role)
+    # `used_at` is deliberately NOT required. A client who already has an
+    # account cannot accept a link (accept refuses to mint a session for an
+    # existing row), so requiring acceptance would lock them out entirely.
+    # What authorises them is being the named party on this project, signing
+    # with their own credentials.
     invited = db.scalars(
         select(Invitation).where(
             Invitation.project_id == project.id,
             func.lower(Invitation.email) == actor.email.lower(),
-            Invitation.used_at.is_not(None),
         )
     ).one_or_none()
     if invited is None:
