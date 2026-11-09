@@ -18,7 +18,7 @@ from app.ai.client import get_client as get_ai_client
 from app.ai.schemas import BriefAnalysis
 from app.database import get_db
 from app.routers.auth import CurrentUser
-from app.schemas.projects import ProjectCreate, ProjectList, ProjectOut
+from app.schemas.projects import ProjectCreate, ProjectList, ProjectOut, ProjectUpdate
 from app.services import analysis as analysis_service
 from app.services import projects as project_service
 from app.services.ai_runs import make_recorder
@@ -113,5 +113,37 @@ def analyse_project(project_id: uuid.UUID, user: CurrentUser, db: DbSession) -> 
             detail={
                 "code": "AI_INVALID_OUTPUT",
                 "message": "The analysis could not be trusted and was discarded. Try again.",
+            },
+        ) from None
+
+@router.patch("/{project_id}", response_model=ProjectOut)
+def update_project(
+    project_id: uuid.UUID, payload: ProjectUpdate, user: CurrentUser, db: DbSession
+) -> ProjectOut:
+    project = project_service.get_for_owner(db, owner_id=user.id, project_id=project_id)
+    if project is None:
+        raise _not_found()
+    return ProjectOut.model_validate(
+        project_service.update(db, project=project, changes=payload)
+    )
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(project_id: uuid.UUID, user: CurrentUser, db: DbSession) -> None:
+    project = project_service.get_for_owner(db, owner_id=user.id, project_id=project_id)
+    if project is None:
+        raise _not_found()
+    try:
+        project_service.delete(db, project=project, actor_id=user.id)
+    except project_service.ProjectHasPayments:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "PROJECT_HAS_PAYMENTS",
+                "message": (
+                    "This project has payments against it and cannot be deleted. "
+                    "A payment record is evidence; it does not disappear because the "
+                    "project did."
+                ),
             },
         ) from None

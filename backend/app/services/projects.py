@@ -68,3 +68,47 @@ def get_for_owner(db: Session, *, owner_id: uuid.UUID, project_id: uuid.UUID) ->
     return db.execute(
         select(Project).where(Project.id == project_id, Project.owner_id == owner_id)
     ).scalar_one_or_none()
+
+
+class ProjectHasPayments(Exception):
+    """A project with money attached is not deletable.
+
+    The foreign keys cascade from project to agreement to milestone, but
+    `payments` is RESTRICT, so the database would refuse anyway. This turns that
+    into a 409 that names the reason.
+    """
+
+
+def update(db: Session, *, project: Project, changes) -> Project:
+    """Apply only the fields the caller actually sent."""
+    for field, value in changes.model_dump(exclude_unset=True).items():
+        setattr(project, field, value)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+def delete(db: Session, *, project: Project, actor_id: uuid.UUID) -> None:
+    from sqlalchemy import func, select
+
+    from app.models import AuditEvent, Payment
+
+    held = db.scalar(
+        select(func.count()).select_from(Payment).where(Payment.project_id == project.id)
+    )
+    if held:
+        raise ProjectHasPayments()
+    project_id = project.id
+    db.delete(project)
+    db.commit()
+    # Written after the delete: `project_id` no longer points at a row, which is
+    # the honest record for a deletion.
+    db.add(
+        AuditEvent(
+            project_id=None,
+            actor_id=actor_id,
+            event_type="PROJECT_DELETED",
+            payload={"project_id": str(project_id)},
+        )
+    )
+    db.commit()
