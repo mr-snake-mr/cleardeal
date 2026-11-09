@@ -117,11 +117,10 @@ async def paypal_webhook(request: Request, db: DbSession) -> dict:
 
     try:
         event = webhook_service.load_event(raw)
-        outcome = webhook_service.handle(db, event=event, now=datetime.now(UTC))
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "INVALID_PAYLOAD", "message": "The event was not usable."},
-        ) from None
+        # Verified but unreadable: 200, because a 400 makes PayPal resend the
+        # same unreadable body 25 times (docs/08 §8: "200 always once verified").
+        return {"status": "ok", "outcome": "invalid_payload"}
 
+    outcome = webhook_service.handle(db, event=event, now=datetime.now(UTC))
     return {"status": "ok", "outcome": outcome, "transmission_id": transmission_id}

@@ -281,11 +281,13 @@ def test_missing_signature_headers_are_refused(client, db):
     assert client.post("/webhooks/paypal", content=json.dumps(payload).encode()).status_code == 400
 
 
-def test_a_verified_but_unparseable_body_is_refused(client, db, signing):
+def test_a_verified_but_unparseable_body_is_200_so_paypal_stops_retrying(client, db, signing):
+    """docs/08 §8: 200 always once verified. A 400 would earn 25 retries of a
+    body that will never parse."""
     raw = b"not json at all"
-    assert client.post(
-        "/webhooks/paypal", content=raw, headers=_headers(signing, raw)
-    ).status_code == 400
+    response = client.post("/webhooks/paypal", content=raw, headers=_headers(signing, raw))
+    assert response.status_code == 200
+    assert response.json()["outcome"] == "invalid_payload"
 
 
 # ------------------------------------------------------------------- reconciliation
@@ -302,7 +304,9 @@ def test_an_event_for_an_unknown_order_is_recorded_and_ignored(client, db, signi
     db.expire_all()
     event = db.get(WebhookEvent, "WH-EVT-UNKNOWN")
     assert event is not None
-    assert event.processed_at is not None
+    # Unprocessed on purpose: a later delivery must be able to reconcile it.
+    assert event.processed_at is None
+    assert event.process_error == "unmatched"
 
 
 def test_a_stale_transmission_is_refused(client, db, signing):
@@ -342,3 +346,104 @@ def test_a_certificate_url_outside_paypal_is_refused(client, db, signing):
     assert client.post("/webhooks/paypal", content=raw, headers=headers).status_code == 400
     db.expire_all()
     assert db.get(Payment, payment.id).status == "CREATED"
+
+
+def test_an_amount_mismatch_blocks_the_capture_and_reports_both_numbers(client, db, signing):
+    """A verified 1.00 USD event must not mark a 120.00 USD payment paid."""
+    payment = _payment(db)
+    payload = _capture_event(order_id=payment.paypal_order_id, event_id="WH-EVT-MISMATCH")
+    payload["resource"]["amount"] = {"currency_code": "USD", "value": "1.00"}
+
+    assert _post(client, signing, payload).status_code == 200
+
+    db.expire_all()
+    updated = db.get(Payment, payment.id)
+    assert updated.status == "RECONCILIATION_REQUIRED"
+    assert updated.captured_at is None
+    event = db.scalars(
+        select(AuditEvent).where(AuditEvent.event_type == "PAYMENT_CAPTURE_MISMATCH")
+    ).one()
+    assert event.payload["received"] == "1.00 USD"
+    assert event.payload["expected"] == "120.00 USD"
+
+
+def test_a_currency_mismatch_is_treated_the_same_way(client, db, signing):
+    payment = _payment(db)
+    payload = _capture_event(order_id=payment.paypal_order_id, event_id="WH-EVT-EUR")
+    payload["resource"]["amount"] = {"currency_code": "EUR", "value": "120.00"}
+
+    assert _post(client, signing, payload).status_code == 200
+
+    db.expire_all()
+    assert db.get(Payment, payment.id).status == "RECONCILIATION_REQUIRED"
+
+
+def test_a_refund_for_an_unpaid_payment_is_not_a_state_transition(client, db, signing):
+    payment = _payment(db, status="CREATED")
+    payload = {
+        "id": "WH-EVT-REFUND-EARLY",
+        "event_type": "PAYMENT.CAPTURE.REFUNDED",
+        "resource": {
+            "id": "3C679366HH908993F",
+            "supplementary_data": {"related_ids": {"order_id": payment.paypal_order_id}},
+        },
+    }
+
+    assert _post(client, signing, payload).status_code == 200
+
+    db.expire_all()
+    assert db.get(Payment, payment.id).status == "CREATED"
+
+
+def test_a_refund_for_a_captured_payment_is_applied(client, db, signing):
+    payment = _payment(db, status="CAPTURED")
+    payload = {
+        "id": "WH-EVT-REFUND",
+        "event_type": "PAYMENT.CAPTURE.REFUNDED",
+        "resource": {
+            "id": "3C679366HH908993F",
+            "supplementary_data": {"related_ids": {"order_id": payment.paypal_order_id}},
+        },
+    }
+
+    assert _post(client, signing, payload).status_code == 200
+
+    db.expire_all()
+    assert db.get(Payment, payment.id).status == "REFUNDED"
+
+
+def test_an_early_event_is_reconciled_when_it_is_delivered_again(client, db, signing):
+    """The documented race: the capture webhook lands before our payment row is
+    visible. Marking it processed would bury it forever; the retry must converge."""
+    # The event lands first, for an order whose payment row does not exist yet.
+    payload = _capture_event(order_id="5O190127TN364715T", event_id="WH-EVT-RACE")
+
+    assert _post(client, signing, payload).status_code == 200
+    db.expire_all()
+    assert db.get(WebhookEvent, "WH-EVT-RACE").processed_at is None
+
+    # Our side catches up: the row is written afterwards, with that order id.
+    payment = _payment(db, order_id="5O190127TN364715T")
+
+    # PayPal redelivers the same event id, byte for byte.
+    assert _post(client, signing, payload).status_code == 200
+
+    db.expire_all()
+    assert db.get(Payment, payment.id).status == "CAPTURED"
+    assert db.get(WebhookEvent, "WH-EVT-RACE").processed_at is not None
+
+
+def test_a_malformed_resource_is_recorded_not_fatal(client, db, signing):
+    """A signed but unreadable shape must not 500: PayPal would retry it for
+    three days and we would have learned nothing."""
+    payload = {
+        "id": "WH-EVT-BAD-SHAPE",
+        "event_type": "PAYMENT.CAPTURE.COMPLETED",
+        "resource": {"id": "3C679366HH908993F", "supplementary_data": "not-a-dict"},
+    }
+
+    response = _post(client, signing, payload)
+
+    assert response.status_code == 200
+    db.expire_all()
+    assert db.get(WebhookEvent, "WH-EVT-BAD-SHAPE") is not None

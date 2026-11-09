@@ -111,8 +111,21 @@ def handle(db: Session, *, event: dict, now: datetime) -> str:
     if not isinstance(event_id, str) or not isinstance(event_type, str):
         raise ValueError("event is missing id or event_type")
 
-    if db.get(WebhookEvent, event_id) is not None:
-        return "duplicate"
+    existing = db.get(WebhookEvent, event_id)
+    if existing is not None:
+        # A duplicate whose first attempt could not match a payment is not
+        # settled. PayPal's retry is the only chance to converge, so re-run
+        # rather than treating "seen once" as "done".
+        if existing.processed_at is not None:
+            return "duplicate"
+        outcome = _safe_reconcile(
+            db, existing.event_type, existing.payload.get("resource") or {}, now
+        )
+        if outcome != "unmatched":
+            existing.processed_at = now
+            existing.process_error = None
+        db.commit()
+        return outcome
 
     row = WebhookEvent(
         event_id=event_id, event_type=event_type, payload=event, verified_at=now
@@ -125,10 +138,28 @@ def handle(db: Session, *, event: dict, now: datetime) -> str:
         db.rollback()
         return "duplicate"
 
-    outcome = _reconcile(db, event_type, event.get("resource") or {}, now)
-    row.processed_at = now
+    outcome = _safe_reconcile(db, event_type, event.get("resource") or {}, now)
+    if outcome == "unmatched":
+        # Leave it unprocessed so the next delivery can try again.
+        row.process_error = "unmatched"
+    else:
+        row.processed_at = now
     db.commit()
     return outcome
+
+
+def _safe_reconcile(db: Session, event_type: str, resource, now: datetime) -> str:
+    """A malformed but authenticated event must not 500.
+
+    PayPal retries non-2xx 25 times over three days, so a shape we cannot read
+    has to be recorded and answered 200 — retrying it changes nothing.
+    """
+    if not isinstance(resource, dict):
+        return "unmatched"
+    try:
+        return _reconcile(db, event_type, resource, now)
+    except Exception as exc:  # noqa: BLE001 - recorded on the row, never raised
+        return f"error:{type(exc).__name__}"
 
 
 def _reconcile(db: Session, event_type: str, resource: dict, now: datetime) -> str:
@@ -157,6 +188,11 @@ def _reconcile(db: Session, event_type: str, resource: dict, now: datetime) -> s
         return "denied"
 
     if event_type == "PAYMENT.CAPTURE.REFUNDED":
+        if payment.status != "CAPTURED":
+            # A refund for money we never booked is a discrepancy to look at,
+            # not a state transition. REFUNDED on a CREATED row leaves a payment
+            # that was never paid and never will be.
+            return "unmatched"
         payment.status = "REFUNDED"
         return "refunded"
 
@@ -167,6 +203,29 @@ def _reconcile(db: Session, event_type: str, resource: dict, now: datetime) -> s
         # Already booked from the capture response. Converging twice is a no-op,
         # never a second audit row claiming another payment.
         return "already"
+
+    money = resource.get("amount") if isinstance(resource.get("amount"), dict) else {}
+    event_amount = str(money.get("value") or "")
+    event_currency = money.get("currency_code")
+    if event_amount != f"{payment.amount:.2f}" or event_currency != payment.currency:
+        # docs/04 §5: an amount mismatch is RECONCILIATION_REQUIRED, never paid.
+        # Without this, a 1.00 EUR event marks a 120.00 USD payment CAPTURED.
+        payment.status = "RECONCILIATION_REQUIRED"
+        db.add(
+            AuditEvent(
+                project_id=payment.project_id,
+                actor_id=None,
+                event_type="PAYMENT_CAPTURE_MISMATCH",
+                payload={
+                    "payment_id": str(payment.id),
+                    "expected": f"{payment.amount:.2f} {payment.currency}",
+                    # The event's numbers, not the database's: copying ours here
+                    # would launder the very mismatch being reported.
+                    "received": f"{event_amount} {event_currency}",
+                },
+            )
+        )
+        return "mismatch"
 
     capture_id = resource.get("id")
     if not isinstance(capture_id, str) or not capture_id:
