@@ -17,6 +17,10 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_db_path}"
 # unless `debug` is on, and the test suite should exercise the production guard
 # rather than the exemption from it.
 os.environ["SESSION_SECRET"] = "test-secret-2f8c1d4e6a9b0c3f5e7d1a2b4c6d8e0f"
+# 32 bytes of entropy, hex-encoded: the shape a real deployment should use.
+os.environ["CREDENTIALS_ENCRYPTION_KEY"] = (
+    "6f1c2b7d4e8a90c3f5d6b7a1e2c4d8f0a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d2"
+)
 
 from app.main import create_app  # noqa: E402
 

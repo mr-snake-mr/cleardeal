@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     session_secret: str = "dev-insecure-secret-change-me"
     session_ttl_hours: int = 12
 
+    # Model B only. Absent key = credential storage refuses to run rather than
+    # writing plaintext (app/crypto.py). Deliberately not defaulted to a value:
+    # a default encryption key is a published encryption key.
+    credentials_encryption_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
