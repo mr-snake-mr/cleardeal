@@ -243,7 +243,11 @@ A `2xx` is returned only after verification. Returning `200` to an unverified bo
 
 The response contains **no secret field at all** — not masked, not truncated, absent. A masked secret is still a leak of its length and prefix.
 
-On `PUT`, the server obtains a token with the supplied credentials to prove they work, then stores them. Invalid credentials → `400 INVALID_CREDENTIALS`, nothing stored.
+On `PUT`, the server encrypts and stores the pair. **It does not verify them.** Proving credentials work requires the PayPal token endpoint, which lands with the PayPal client in Block 2.8; until then a wrong pair is accepted and fails on the first order. `status: CONNECTED` therefore means *stored*, not *working*, and `INVALID_CREDENTIALS` is not yet reachable from this endpoint.
+
+That is a deliberate, dated gap rather than an implied capability. It is the same discipline as A-2: no endpoint gets to claim more than the system can demonstrate.
+
+The PUT response is `201 {status, paypal_merchant_id, connected_at}` — `connected_at` is included because the client shows it and the contract previously omitted it.
 
 `paypal_merchant_id` is populated **if PayPal exposes it** during that token exchange; if it does not, the column stays `NULL` until the first verified capture supplies a payee. That is assumption A-13, not a documented capability — the only payee-identifier claim in 04 is about the capture response (A-2), and this endpoint does not get to assume more than the source document supports.
 

@@ -3,13 +3,20 @@
 The tests that matter here are the ones about what is *not* returned.
 """
 
+import uuid
 from decimal import Decimal  # noqa: F401  (kept for parity with sibling tests)
 
 import pytest
 from sqlalchemy import delete, select
 
 from app.config import settings
-from app.crypto import CredentialUnreadable, EncryptionKeyMissing, decrypt, encrypt
+from app.crypto import (
+    CredentialUnreadable,
+    EncryptionKeyInvalid,
+    EncryptionKeyMissing,
+    decrypt,
+    encrypt,
+)
 from app.database import SessionLocal
 from app.models import MerchantAccount, User
 
@@ -56,24 +63,34 @@ def _connect(client, **overrides):
 # ------------------------------------------------------------------- crypto
 
 
+AAD = b"owner-uuid-bytes"
+
+
 def test_round_trip_returns_the_original():
-    assert decrypt(encrypt(CLIENT_SECRET)) == CLIENT_SECRET
+    assert decrypt(encrypt(CLIENT_SECRET, aad=AAD), aad=AAD) == CLIENT_SECRET
+
+
+def test_a_blob_moved_to_another_owner_does_not_decrypt():
+    """Catches missing AAD: without it, copying a row copies the identity."""
+    blob = encrypt(CLIENT_SECRET, aad=b"owner-a")
+    with pytest.raises(CredentialUnreadable):
+        decrypt(blob, aad=b"owner-b")
 
 
 def test_two_encryptions_of_the_same_value_differ():
     """Catches a fixed nonce, which would make the ciphertext a fingerprint."""
-    assert encrypt(CLIENT_SECRET) != encrypt(CLIENT_SECRET)
+    assert encrypt(CLIENT_SECRET, aad=AAD) != encrypt(CLIENT_SECRET, aad=AAD)
 
 
 def test_the_ciphertext_does_not_contain_the_plaintext():
-    assert CLIENT_SECRET.encode() not in encrypt(CLIENT_SECRET)
+    assert CLIENT_SECRET.encode() not in encrypt(CLIENT_SECRET, aad=AAD)
 
 
 def test_a_flipped_bit_is_rejected_not_silently_decrypted():
-    blob = bytearray(encrypt(CLIENT_SECRET))
+    blob = bytearray(encrypt(CLIENT_SECRET, aad=AAD))
     blob[-1] ^= 0x01
     with pytest.raises(CredentialUnreadable):
-        decrypt(bytes(blob))
+        decrypt(bytes(blob), aad=AAD)
 
 
 def test_a_truncated_blob_is_rejected():
@@ -82,16 +99,35 @@ def test_a_truncated_blob_is_rejected():
 
 
 def test_a_wrong_key_is_rejected(monkeypatch):
-    blob = encrypt(CLIENT_SECRET)
-    monkeypatch.setattr(settings, "credentials_encryption_key", "a-different-key")
+    blob = encrypt(CLIENT_SECRET, aad=AAD)
+    monkeypatch.setattr(settings, "credentials_encryption_key", "a" * 64)
     with pytest.raises(CredentialUnreadable):
-        decrypt(blob)
+        decrypt(blob, aad=AAD)
 
 
 def test_a_missing_key_raises_rather_than_storing_plaintext(monkeypatch):
     monkeypatch.setattr(settings, "credentials_encryption_key", "")
     with pytest.raises(EncryptionKeyMissing):
-        encrypt(CLIENT_SECRET)
+        encrypt(CLIENT_SECRET, aad=AAD)
+
+
+def test_a_weak_or_malformed_key_is_rejected(monkeypatch):
+    """sha256("x") would look like a 256-bit key with ~4 bits of entropy."""
+    for bad in ("x", "not-a-key", "abc123", "z" * 64):
+        monkeypatch.setattr(settings, "credentials_encryption_key", bad)
+        with pytest.raises(EncryptionKeyInvalid):
+            encrypt(CLIENT_SECRET, aad=AAD)
+
+
+def test_base64_keys_are_accepted(monkeypatch):
+    import base64
+
+    monkeypatch.setattr(
+        settings,
+        "credentials_encryption_key",
+        base64.b64encode(b"0123456789abcdef0123456789abcdef").decode(),
+    )
+    assert decrypt(encrypt(CLIENT_SECRET, aad=AAD), aad=AAD) == CLIENT_SECRET
 
 
 # -------------------------------------------------------------------- store
@@ -108,13 +144,13 @@ def test_connect_returns_201_and_no_secret_field(client):
 
 def test_the_secret_is_stored_as_ciphertext(client, db):
     """Reads the raw column: a regression to plaintext fails here and nowhere else."""
-    _signup(client)
+    owner_id = uuid.UUID(_signup(client).json()["id"])
     _connect(client)
 
     blob = db.execute(select(MerchantAccount.encrypted_client_secret)).scalar_one()
 
     assert CLIENT_SECRET.encode() not in blob
-    assert decrypt(blob) == CLIENT_SECRET
+    assert decrypt(blob, aad=owner_id.bytes) == CLIENT_SECRET
 
 
 def test_get_never_returns_the_secret(client):
@@ -133,7 +169,10 @@ def test_reconnecting_replaces_rather_than_duplicates(client, db):
     rows = db.execute(select(MerchantAccount)).scalars().all()
 
     assert len(rows) == 1
-    assert decrypt(rows[0].encrypted_client_secret) == "A-DIFFERENT-SECRET-000000"
+    assert (
+        decrypt(rows[0].encrypted_client_secret, aad=rows[0].user_id.bytes)
+        == "A-DIFFERENT-SECRET-000000"
+    )
 
 
 def test_get_before_connect_is_404(client):

@@ -47,7 +47,7 @@ SQL injection is structurally absent: every query is SQLAlchemy Core/ORM with bo
 
 | Threat | Control |
 |---|---|
-| **I**nformation disclosure | `client_secret` never appears in a log, an error body, a response, or a traceback. Logging filter redacts keys matching `secret\|token\|authorization`. |
+| **I**nformation disclosure | `client_secret` never appears in a log, an error body, a response, or a traceback. `app/logging_config.py` installs a root-handler filter that rewrites any `key=value` whose key matches `secret\|token\|authorization\|password\|api_key`, including `Bearer`-scheme values. **Limit, stated:** it matches key/value pairs, not bare values — `print(secret)` is not caught, and no filter can catch it. |
 | **I**nformation disclosure | `merchant_accounts` stores AES-GCM ciphertext (`encrypted_client_id`, `encrypted_client_secret`) with a 96-bit random nonce per record, key from `CREDENTIALS_ENCRYPTION_KEY`. A database dump alone does not yield credentials. |
 | **S**poofing | Token fetched per request with the *resolving merchant's* credentials; no credential is ever taken from the request body at capture time |
 | **T**ampering | The capture response is asserted field by field (status, amount, currency, order id) before any write — plus the payee id when the response carries one (A-2). `COMPLETED` alone is not enough. |
@@ -56,7 +56,7 @@ SQL injection is structurally absent: every query is SQLAlchemy Core/ORM with bo
 
 **Why we store seller secrets at all.** Because multiparty onboarding requires PayPal partner approval (04 §1.3), and bring-your-own-merchant is the only model in which the money genuinely reaches the freelancer. This is documented as a known trade-off with a named production replacement — OAuth seller onboarding — not presented as ideal.
 
-**Key management.** `CREDENTIALS_ENCRYPTION_KEY` is a 32-byte key from the environment. Rotating it requires re-encrypting `merchant_accounts`; there is no rotation job in this build (R-10). Startup fails if the key is absent while a merchant row exists — better to refuse than to silently mark every merchant `INVALID`.
+**Key management.** `CREDENTIALS_ENCRYPTION_KEY` is a 32-byte key from the environment. Rotating it requires re-encrypting `merchant_accounts`; there is no rotation job in this build (R-10). Startup fails if the key is absent while a merchant row exists — `create_app` counts rows and raises rather than booting into a state where every credential is unreadable and the first payment discovers it. A key that is present but malformed is also rejected: 32 bytes as 64 hex characters or 44-character base64.
 
 ## 5. B4 — PayPal webhook to API
 

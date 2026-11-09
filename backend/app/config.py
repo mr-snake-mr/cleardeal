@@ -1,6 +1,6 @@
 """Application settings, loaded from the environment.
 
-No secret is declared here yet — PayPal credentials arrive with the PayPal client
+Secrets arrive from the environment only. PayPal credentials are per-tenant and
 and are modelled as required fields at that point, so a missing value fails at
 startup rather than at the first payment. `extra="ignore"` means a variable
 present in .env but undeclared here is silently dropped, so anything required

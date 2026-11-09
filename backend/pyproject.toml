@@ -6,15 +6,16 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+    # Required, not optional: the merchants router is always mounted, so an
+    # optional extra would make a plain `pip install .` fail at import time and
+    # take auth and projects down with it.  (Added 2026-11-09 with approval.)
+    "cryptography>=43",
     "pydantic-settings>=2.4",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
-# Added 2026-11-09 with the user's approval. AES-GCM is not in the stdlib, and
-# the alternative to encrypting seller credentials is storing them in plaintext.
-payments = ["cryptography>=43"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",

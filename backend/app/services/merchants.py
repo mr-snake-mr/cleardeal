@@ -36,13 +36,13 @@ def connect(
     if row is None:
         row = MerchantAccount(
             user_id=user_id,
-            encrypted_client_id=encrypt(client_id),
-            encrypted_client_secret=encrypt(client_secret),
+            encrypted_client_id=encrypt(client_id, aad=user_id.bytes),
+            encrypted_client_secret=encrypt(client_secret, aad=user_id.bytes),
         )
         db.add(row)
     else:
-        row.encrypted_client_id = encrypt(client_id)
-        row.encrypted_client_secret = encrypt(client_secret)
+        row.encrypted_client_id = encrypt(client_id, aad=user_id.bytes)
+        row.encrypted_client_secret = encrypt(client_secret, aad=user_id.bytes)
         # A revoked account becomes usable again by reconnecting; that is the
         # point of the endpoint.
         row.status = "CONNECTED"
@@ -63,7 +63,11 @@ def credentials_for(db: Session, *, user_id: uuid.UUID) -> tuple[str, str] | Non
     row = get(db, user_id=user_id)
     if row is None or row.status != "CONNECTED":
         return None
-    return decrypt(row.encrypted_client_id), decrypt(row.encrypted_client_secret)
+    blob_id, blob_secret = row.encrypted_client_id, row.encrypted_client_secret
+    return (
+        decrypt(blob_id, aad=user_id.bytes),
+        decrypt(blob_secret, aad=user_id.bytes),
+    )
 
 
 def revoke(db: Session, *, user_id: uuid.UUID) -> bool:

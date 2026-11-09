@@ -11,8 +11,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import engine
+from app.database import SessionLocal, engine
 from app.errors import install_error_handlers
+from app.logging_config import install_logging
 from app.routers import auth, health, merchants, projects
 
 
@@ -34,7 +35,9 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        debug=settings.debug,
+        # Always False: with debug on, Starlette renders a traceback page and
+        # our sanitised 500 envelope is bypassed. Tracebacks belong in logs.
+        debug=False,
         lifespan=lifespan,
     )
 
@@ -57,6 +60,30 @@ def create_app() -> FastAPI:
         raise ValueError(
             "SESSION_SECRET must be set to a real secret in live mode; the "
             "development default is public."
+        )
+
+    install_logging()
+
+    # docs/10 §4: "startup fails if the key is absent while a merchant row
+    # exists". Without this the app boots, reports CONNECTED, and only fails on
+    # the first payment — the worst possible moment to discover it.
+    with SessionLocal() as probe:
+        from sqlalchemy import func, select
+
+        from app.models import MerchantAccount
+
+        try:
+            merchant_rows = probe.execute(
+                select(func.count()).select_from(MerchantAccount)
+            ).scalar_one()
+        except Exception:  # noqa: BLE001 - an unmigrated DB is reported by /health
+            merchant_rows = 0
+
+    if merchant_rows and not settings.credentials_encryption_key:
+        raise ValueError(
+            "CREDENTIALS_ENCRYPTION_KEY is not set but merchant credentials "
+            "exist. Refusing to start: every stored credential would be "
+            "unreadable, and a first payment would fail instead of a boot."
         )
 
     # Infra probe, deliberately outside /api/v1 so it never becomes part of the
