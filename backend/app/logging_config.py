@@ -26,7 +26,10 @@ import re
 REDACTED = "[REDACTED]"
 
 _SECRET_PAIR = re.compile(
-    r"(client_secret|secret|token|authorization|password|api[_-]?key)"
+    # `key` bare is included because a Google API key used to travel as
+    # `?key=...`; the client moved it to a header, but a provider that logs
+    # URLs is not something this file can control.
+    r"(client_secret|secret|token|authorization|password|api[_-]?key|key)"
     r"[\"']?\s*[:=]\s*[\"']?"
     # A scheme prefix (`Bearer xyz`) is part of the secret, not text to keep:
     # leaving it behind leaks the token while looking redacted.

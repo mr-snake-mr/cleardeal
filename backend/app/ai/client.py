@@ -23,7 +23,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -40,6 +40,10 @@ BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 class AiUnavailable(RuntimeError):
     """Transport failure, 5xx after one retry, or no API key configured."""
+
+
+class AiInvalidRequest(RuntimeError):
+    """A 4xx: bad key, bad schema, bad request. Not retryable, not an outage."""
 
 
 class AiInvalidOutput(RuntimeError):
@@ -138,7 +142,10 @@ class GeminiClient:
         schema_json = schema.model_json_schema()
         digest = prompt_hash(prompt, schema_json)
         payload = self._payload(prompt, schema_json)
-        url = f"{BASE_URL}/{self._model}:generateContent?key={self._api_key}"
+        # The key travels in a header, not the query string. In the URL it
+        # lands in httpx's INFO log and inside HTTPStatusError.__str__, which
+        # means the first failed call prints the credential.
+        url = f"{BASE_URL}/{self._model}:generateContent"
 
         started = time.monotonic()
         body = self._call_with_one_retry(url, payload, module, digest, project_id)
@@ -212,7 +219,7 @@ class GeminiClient:
     def _call_with_one_retry(
         self, url: str, payload: dict, module: str, digest: str, project_id: uuid.UUID | None
     ) -> dict:
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", "x-goog-api-key": self._api_key}
         last: Exception | None = None
         for attempt in (1, 2):
             try:
@@ -232,7 +239,11 @@ class GeminiClient:
                         ),
                         project_id,
                     )
-                    raise AiUnavailable(f"provider rejected the request ({status_code})") from exc
+                    # `from None`: the chained exception carries the URL, and
+                    # the URL is not something an error body should ever reach.
+                    raise AiInvalidRequest(
+                        f"provider rejected the request ({status_code})"
+                    ) from None
             except (httpx.RequestError, TimeoutError) as exc:
                 last = exc
             if attempt == 1:
@@ -260,5 +271,3 @@ def get_client(record: Recorder | None = None, transport: Transport | None = Non
     return GeminiClient(record=record, transport=transport)
 
 
-def _unused(_: Any = None) -> None:  # pragma: no cover
-    """Keeps `Any` imported for the Protocol annotations under strict tooling."""

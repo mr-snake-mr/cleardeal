@@ -14,7 +14,13 @@ import pytest
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 
-from app.ai.client import AiInvalidOutput, AiUnavailable, GeminiClient, prompt_hash
+from app.ai.client import (
+    AiInvalidOutput,
+    AiInvalidRequest,
+    AiUnavailable,
+    GeminiClient,
+    prompt_hash,
+)
 from app.database import SessionLocal
 from app.models import AiRun
 from app.services.ai_runs import make_recorder
@@ -116,6 +122,21 @@ def test_a_successful_call_is_recorded_with_tokens_and_latency(db):
     assert row.latency_ms >= 0
 
 
+def test_latency_is_actually_measured(db):
+    """A fake transport returns instantly, so a sleep is the only way to prove
+    the timer is wired at all."""
+    import time
+
+    def slow(url, headers, payload):
+        time.sleep(0.02)
+        return _ok()
+
+    client = GeminiClient(api_key="k", model="m", transport=slow, record=make_recorder(db))
+    client.generate(module="m1", prompt="p", schema=Answer)
+
+    # Lower bound only: a loaded machine makes the upper one flaky, and the\n    # claim being tested is "the timer runs", not "it is precise".\n    assert db.execute(select(AiRun)).scalar_one().latency_ms >= 10
+
+
 def test_the_prompt_hash_is_stable_and_sensitive(db):
     a = prompt_hash("same", SCHEMA_JSON)
     b = prompt_hash("same", SCHEMA_JSON)
@@ -166,7 +187,7 @@ def test_a_client_error_is_not_retried(db):
         api_key="k", model="m", transport=transport, record=make_recorder(db)
     )
 
-    with pytest.raises(AiUnavailable):
+    with pytest.raises(AiInvalidRequest):
         client.generate(module="m1", prompt="p", schema=Answer)
 
     assert transport.calls == 1
@@ -188,8 +209,14 @@ def test_a_connection_error_is_retried_then_raises(db):
 
 
 def test_unparseable_output_raises_and_is_recorded(db):
+    transport = FakeTransport(_ok("not json at all"), _ok())
+    client = GeminiClient(api_key="k", model="m", transport=transport, record=make_recorder(db))
+
     with pytest.raises(AiInvalidOutput):
-        _client(db, _ok("not json at all")).generate(module="m1", prompt="p", schema=Answer)
+        client.generate(module="m1", prompt="p", schema=Answer)
+
+    # A parse error is not retried: the same text would parse the same way.
+    assert transport.calls == 1
 
     assert db.execute(select(AiRun)).scalar_one().validation_status == "parse_error"
 

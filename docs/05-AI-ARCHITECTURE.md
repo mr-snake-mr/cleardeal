@@ -93,8 +93,11 @@ build prompt -> call model -> JSON parse -> Pydantic parse -> semantic checks
 
 | Step | Failure | User sees | Database |
 |---|---|---|---|
-| HTTP | timeout / 5xx | `503 AI_UNAVAILABLE`, retry | `ai_runs.validation_status = "transport_error"` |
-| JSON parse | malformed | retry once, then `502 AI_INVALID_OUTPUT` | `"parse_error"` |
+| HTTP | timeout / 5xx | one retry, then `503 AI_UNAVAILABLE` | `"transport_error"` |
+| HTTP | 4xx (bad key or schema) | no retry; `502 AI_INVALID_REQUEST` — an outage is not what happened | `"client_error"` |
+| config | no API key | `503 AI_UNAVAILABLE` before any spend | `"not_configured"` |
+| success | — | the validated object | `"ok"` |
+| JSON parse | malformed | no retry, then `502 AI_INVALID_OUTPUT` — the same text parses the same way twice | `"parse_error"` |
 | Pydantic | wrong shape | same | `"schema_error"` |
 | Semantic | invariant broken | same | `"semantic_error"` |
 | Evidence | unresolvable | item downgraded, **run succeeds** | `"downgraded"` |

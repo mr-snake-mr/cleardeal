@@ -18,31 +18,39 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.ai.client import AiCall
+from app.database import SessionLocal
 from app.models import AiRun
 
 
-def make_recorder(db: Session):
+def make_recorder(_db: Session | None = None):
     """Returns the callable `GeminiClient` accepts.
 
-    It commits independently of the caller's transaction on purpose: if the
-    surrounding request rolls back, the fact that a call was made and what it
-    cost is still true, and losing it would make the log disagree with the bill.
+    It writes on **its own session**, not the caller's. Sharing the caller's
+    session would mean the log commit also commits whatever else that request
+    had pending — so a rolled-back request would leave half its work behind —
+    and a poisoned session would turn a provider failure into a
+    `PendingRollbackError`. The log has to survive the caller and cannot depend
+    on it.
     """
 
     def record(call: AiCall, project_id: uuid.UUID | None) -> None:
-        db.add(
-            AiRun(
-                project_id=project_id,
-                module=call.module,
-                model=call.model,
-                prompt_hash=call.prompt_hash or "no-prompt",
-                input_tokens=call.input_tokens,
-                output_tokens=call.output_tokens,
-                latency_ms=call.latency_ms,
-                validation_status=call.status,
+        session = SessionLocal()
+        try:
+            session.add(
+                AiRun(
+                    project_id=project_id,
+                    module=call.module,
+                    model=call.model,
+                    prompt_hash=(call.prompt_hash or "no-prompt")[:64],
+                    input_tokens=call.input_tokens,
+                    output_tokens=call.output_tokens,
+                    latency_ms=call.latency_ms,
+                    validation_status=call.status,
+                )
             )
-        )
-        db.commit()
+            session.commit()
+        finally:
+            session.close()
 
     return record
 

@@ -324,7 +324,7 @@ Three failures hit this project and are now guarded:
 | Autogenerate diffs against the **live DB**, so deleting a revision file chains onto a stale `down_revision` | regenerate only from an empty database, and assert `down_revision is None` on the initial revision |
 | Autogenerate emits `app.money.Money()` without importing it → `NameError` | `import app.money` is in `script.py.mako`, so every generated file carries it |
 
-Proof of the current schema: `upgrade head` → `downgrade base` → `upgrade head`, all clean; 14 `create_table` and 11 `create_index` calls in `migrations/versions/190a4bb0fc86_initial_schema.py` with `down_revision = None`; 151 passing tests including `test_declared_indexes_exist_in_the_database` as a drift guard.
+Proof of the current schema: `upgrade head` → `downgrade base` → `upgrade head`, all clean; 14 `create_table` and 11 `create_index` calls in `migrations/versions/190a4bb0fc86_initial_schema.py` with `down_revision = None`; 152 passing tests including `test_declared_indexes_exist_in_the_database` as a drift guard.
 
 ## 11. Server defaults
 
