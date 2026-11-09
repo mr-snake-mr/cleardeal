@@ -13,6 +13,7 @@ to `ANALYSED`. Agreement rows are built later, from what a human accepts.
 from __future__ import annotations
 
 import pathlib
+import re
 
 from sqlalchemy.orm import Session
 
@@ -25,15 +26,49 @@ PROMPT_PATH = (
 )
 
 
+PLACEHOLDER = re.compile(r"\{\{(brief|budget|currency|deadline)\}\}")
+
+
 def render_prompt(project: Project) -> str:
-    """Plain placeholder substitution: no template engine for three fields."""
+    """One substitution pass over the template.
+
+    Chained `.replace()` calls re-scan text that was already inserted, so a
+    brief containing the literal `{{deadline}}` would have the project's real
+    deadline spliced into the client's own words. `re.sub` replaces against the
+    original template only, so inserted content is never re-read.
+    """
     template = PROMPT_PATH.read_text(encoding="utf-8")
-    return (
-        template.replace("{{brief}}", project.brief)
-        .replace("{{budget}}", f"{project.budget_amount:.2f}")
-        .replace("{{currency}}", project.currency)
-        .replace("{{deadline}}", project.deadline.isoformat() if project.deadline else "not stated")
-    )
+    values = {
+        "brief": project.brief,
+        "budget": f"{project.budget_amount:.2f}",
+        "currency": project.currency,
+        "deadline": project.deadline.isoformat() if project.deadline else "not stated",
+    }
+    return PLACEHOLDER.sub(lambda match: values[match.group(1)], template)
+
+
+def assert_quotes_come_from_the_brief(brief: str) -> None:
+    """The central rule, enforced where it can actually be checked.
+
+    The schema can only see that a `quote` field is non-empty. Only the service
+    holds the brief, so only the service can tell a quotation from an invention.
+    A fabricated quote is the failure this product exists to prevent — an
+    `explicit` label the reader cannot verify is worse than no label.
+    """
+
+    def check(result: object) -> None:
+        requirements = getattr(result, "requirements", [])
+        haystack = " ".join(brief.split())
+        for requirement in requirements:
+            if getattr(requirement, "source", None) != "explicit":
+                continue
+            quote = " ".join((requirement.quote or "").split())
+            if not quote or quote not in haystack:
+                raise ValueError(
+                    "an explicit requirement quoted text that is not in the brief"
+                )
+
+    return check
 
 
 def analyse(db: Session, *, project: Project, client: GeminiClient) -> BriefAnalysis:
@@ -42,6 +77,7 @@ def analyse(db: Session, *, project: Project, client: GeminiClient) -> BriefAnal
         prompt=render_prompt(project),
         schema=BriefAnalysis,
         project_id=project.id,
+        validator=assert_quotes_come_from_the_brief(project.brief),
     )
 
     project.status = "ANALYSED"

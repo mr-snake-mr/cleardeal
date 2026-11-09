@@ -22,6 +22,7 @@ import hashlib
 import json
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -123,6 +124,7 @@ class GeminiClient:
         prompt: str,
         schema: type[BaseModel],
         project_id: uuid.UUID | None = None,
+        validator: Callable[[BaseModel], None] | None = None,
     ) -> BaseModel:
         if not self._api_key:
             # Fail before spending anything, and record it: a missing key is an
@@ -209,6 +211,26 @@ class GeminiClient:
                 project_id,
             )
             raise AiInvalidOutput("model output failed schema validation") from exc
+
+        # A semantic check the caller supplies — "the quote is in the brief",
+        # "the milestone sum equals the budget". It runs BEFORE the ok row is
+        # written, so a rejected result is never logged as a clean run.
+        if validator is not None:
+            try:
+                validator(result)
+            except ValueError as exc:
+                self._emit(
+                    AiCall(
+                        module=module,
+                        model=self._model,
+                        prompt_hash=digest,
+                        status="semantic_error",
+                        latency_ms=latency_ms,
+                        **tokens,
+                    ),
+                    project_id,
+                )
+                raise AiInvalidOutput(str(exc)) from exc
 
         self._emit(
             AiCall(

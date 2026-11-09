@@ -77,6 +77,17 @@ def analyse_project(project_id: uuid.UUID, user: CurrentUser, db: DbSession) -> 
     if project is None:
         raise _not_found()
 
+    # Only a DRAFT can be analysed. Without this, re-analysing an APPROVED or
+    # COMPLETED project silently rewinds it, and nothing in the schema objects.
+    if project.status != "DRAFT":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "PROJECT_NOT_DRAFT",
+                "message": f"Only a draft can be analysed; this project is {project.status}.",
+            },
+        )
+
     client = get_ai_client(record=make_recorder(db))
     try:
         return analysis_service.analyse(db, project=project, client=client)
