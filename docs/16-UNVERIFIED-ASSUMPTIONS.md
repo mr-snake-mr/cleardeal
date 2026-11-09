@@ -11,8 +11,8 @@ Rule for the build: an assumption that turns out false must change the documents
 | | |
 |---|---|
 | **Assumption** | `POST /v2/checkout/orders/{id}/capture` returns a capture whose `payee.merchant_id` identifies the receiving merchant |
-| **Status** | **Unconfirmed.** PayPal's Orders v2 reference documents a `payee` object on captures; the exact field name and its presence on a sandbox capture have not been observed in this build |
-| **How to close** | Block 2.2: create and capture one real sandbox order, save the JSON, grep for `payee` |
+| **Status** | **Unconfirmed, and now doubted.** The capture reference (`orders-capture`, fetched 2026-11-09) documents **no `payee` on the capture object**; `payee` appears in the *create-order request* body and in `payment_instruction.platform_fees`, neither of which is the capture response. A live sandbox response may still carry it — a documentation omission is not a guarantee — but the earlier wording here ("the reference documents a payee object on captures") was wrong and is corrected |
+| **How to close** | Block 2.2: create and capture one real sandbox order, save the JSON, grep for `payee`. `app/services/paypal.py::_extract_payee` surfaces the id when present and returns `None` when absent, so either outcome is a data change, not a code change |
 | **Time** | 20 minutes |
 | **If false** | Docs 03, 04, 08, 09 lose the "paid to (PayPal-verified)" claim. The UI shows "Paid — capture verified". Everything else stands. |
 | **Severity** | High. This is the only assumption that can change what the product says about money. |

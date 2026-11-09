@@ -22,7 +22,7 @@ Source: [developer.paypal.com/api/orders/v2/](https://developer.paypal.com/api/o
 | `POST /v2/checkout/orders/{id}/capture` | **Capture** |
 | `POST /v2/checkout/orders/{id}/track` | Tracking |
 
-Sandbox host, from the official webhook sample: `https://api.sandbox.paypal.com`.
+Sandbox host: **`https://api-m.sandbox.paypal.com`**, per the authentication reference and the `Server URL` line of the capture reference (both re-fetched 2026-11-09). An earlier revision of this document recorded `https://api.sandbox.paypal.com` from a webhook sample; that host is legacy and does not match either reference page. Live host: `https://api-m.paypal.com`.
 
 Three states are produced by this API. A fourth must never be claimed:
 
