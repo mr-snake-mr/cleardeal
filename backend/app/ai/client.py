@@ -221,7 +221,12 @@ class GeminiClient:
         if validator is not None:
             try:
                 validator(result)
-            except ValueError as exc:
+            except Exception as exc:  # noqa: BLE001 - any rejection must be logged
+                # Deliberately broad. The contract is "a rejected result is never
+                # logged as a clean run", and a validator written against a
+                # duck-typed object raises `AttributeError`, not `ValueError`.
+                # Narrowing this to `ValueError` left that path invisible in
+                # `ai_runs` — a paid call with no row.
                 self._emit(
                     AiCall(
                         module=module,
@@ -291,7 +296,11 @@ class GeminiClient:
                     raise AiInvalidRequest(
                         f"provider rejected the request ({status_code})"
                     ) from None
-            except (httpx.RequestError, TimeoutError) as exc:
+            except (httpx.RequestError, TimeoutError, json.JSONDecodeError) as exc:
+                # A 200 whose body is not JSON is what a captive portal or a
+                # proxy error page looks like. `response.json()` raises
+                # `JSONDecodeError`, which is not an `httpx` error, so without
+                # this the retry loop missed it and the caller saw a 500.
                 last = exc
             if attempt == 1:
                 continue

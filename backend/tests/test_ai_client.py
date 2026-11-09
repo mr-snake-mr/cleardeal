@@ -105,6 +105,47 @@ def _client(db, *outcomes, api_key="test-key"):
     )
 
 
+def _statuses(db) -> list[str]:
+    return [row.validation_status for row in db.scalars(select(AiRun).order_by(AiRun.created_at))]
+
+
+def test_a_validator_that_raises_something_else_is_still_recorded(db):
+    """The semantic gate catches `ValueError`. A validator written against a
+    duck-typed object raises `AttributeError` instead, and that path used to
+    escape with no `AiCall` row at all — a paid request, invisible in the log
+    the product presents as evidence.
+    """
+    def explodes(_result):
+        raise AttributeError("quote")
+
+    client = _client(db)
+
+    with pytest.raises(AiInvalidOutput):
+        client.generate(
+            module="brief_analysis", prompt="p", schema=Answer, validator=explodes
+        )
+
+    assert _statuses(db) == ["semantic_error"]
+
+
+def test_a_200_that_is_not_json_is_a_transport_failure(db, monkeypatch):
+    """A captive portal or proxy answers 200 with HTML. `response.json()` raises
+    `JSONDecodeError`, which the retry loop did not catch, so it surfaced as an
+    unhandled 500 — the one failure mode the client exists to translate.
+    """
+    request = httpx.Request("POST", "https://example.test")
+    monkeypatch.setattr(
+        httpx, "post", lambda *a, **k: httpx.Response(200, text="<html>", request=request)
+    )
+
+    client = GeminiClient(api_key="test-key", model="test-model", record=make_recorder(db))
+
+    with pytest.raises(AiUnavailable):
+        client.generate(module="brief_analysis", prompt="p", schema=Answer)
+
+    assert _statuses(db) == ["transport_error"]
+
+
 # ------------------------------------------------------------------- success
 
 

@@ -99,7 +99,11 @@ def _collapse_nullable(node: Any) -> Any:
         nulls = [p for p in parts if isinstance(p, dict) and p.get("type") == "null"]
         others = [p for p in parts if p not in nulls]
         if len(nulls) == 1 and len(others) == 1 and isinstance(others[0], dict):
-            collapsed = dict(node)
+            # Filtered like the fallback branch below. It used to copy the node
+            # wholesale, which carried Pydantic's `default: null` through — and
+            # `default` is not a key Gemini's Schema accepts, so every call with
+            # a nullable field was a 400.
+            collapsed = {k: v for k, v in node.items() if k not in _DROP_KEYS}
             collapsed.pop("anyOf", None)
             inner = _collapse_nullable(others[0])
             collapsed.update({k: v for k, v in inner.items() if k != "title"})

@@ -125,3 +125,22 @@ def test_the_real_analysis_schema_is_flat_and_keeps_its_fields():
     assert "$ref" not in blob and "$defs" not in blob and "anyOf" not in blob
     requirement = schema["properties"]["requirements"]["items"]
     assert set(requirement["properties"]) == {"text", "source", "quote"}
+
+
+def test_no_stripped_key_survives_the_nullable_collapse():
+    """The collapse path is not a licence to ship keywords the server rejects.
+
+    Pydantic emits `default: null` beside the `anyOf` it emits for `str | None`.
+    The collapse branch used to return the node it had copied, so that `default`
+    survived while the fallback branch filtered it — and the one nullable field
+    in `BriefAnalysis` is `Requirement.quote`, so the leak landed on every call.
+    Gemini's `Schema` has no `default` key, which makes this a 400 on the
+    product's entry point.
+    """
+    from app.ai.schema_tools import _DROP_KEYS
+    from app.ai.schemas import BriefAnalysis
+
+    for model in (Nested, BriefAnalysis):
+        for node in _walk(generation_schema(model)):
+            leaked = set(node) & _DROP_KEYS
+            assert not leaked, (model.__name__, leaked)
