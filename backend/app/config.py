@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # Constrained so a typo cannot silently produce a third environment.
     paypal_env: Literal["sandbox", "live"] = "sandbox"
 
+    # Signs session cookies. The default exists so `pytest` and a fresh clone
+    # boot without ceremony; `create_app` refuses to start with it in `live`
+    # mode, because a published signing key is an authentication bypass.
+    session_secret: str = "dev-insecure-secret-change-me"
+    session_ttl_hours: int = 12
+
 
 @lru_cache
 def get_settings() -> Settings:

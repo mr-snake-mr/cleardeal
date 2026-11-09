@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine
-from app.routers import health
+from app.routers import auth, health
 
 
 @asynccontextmanager
@@ -48,9 +48,19 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization", "Idempotency-Key"],
     )
 
+    # A published signing key is an authentication bypass. Refusing to boot is
+    # the only safe response — a warning in a log is a warning nobody reads.
+    if settings.paypal_env == "live" and settings.session_secret.startswith("dev-insecure"):
+        raise ValueError(
+            "SESSION_SECRET must be set to a real secret in live mode; the "
+            "development default is public."
+        )
+
     # Infra probe, deliberately outside /api/v1 so it never becomes part of the
     # public contract.
     app.include_router(health.router, tags=["infra"])
+
+    app.include_router(auth.router, prefix="/api/v1")
 
     return app
 

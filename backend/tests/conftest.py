@@ -33,5 +33,12 @@ def _migrated_database() -> Iterator[None]:
 
 @pytest.fixture(scope="session")
 def client() -> Iterator[TestClient]:
-    with TestClient(create_app()) as c:
+    """HTTPS base URL on purpose.
+
+    Session cookies are `Secure` outside debug, and a `Secure` cookie is silently
+    dropped over `http://`. A test client on `http://testserver` would therefore
+    fail every authenticated request for a reason that has nothing to do with the
+    code under test. Testing over `https` is also closer to the deployment.
+    """
+    with TestClient(create_app(), base_url="https://testserver") as c:
         yield c
