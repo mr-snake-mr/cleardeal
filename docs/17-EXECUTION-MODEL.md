@@ -35,11 +35,11 @@ AUDIT     SPEC: PASS | FAIL <findings>
           VERDICT: PASS | FAIL
 ```
 
-`EVIDENCE` is the field that does the work. "All tests pass" is not evidence. `152 passed, 96.37% coverage, exit 0` is.
+`EVIDENCE` is the field that does the work. "All tests pass" is not evidence. `153 passed, 96.39% coverage, exit 0` is.
 
 The auditor checks three things, in order:
 
-1. **Does the evidence show what was claimed?** Re-run one command. A claim of 152 tests is checked by counting.
+1. **Does the evidence show what was claimed?** Re-run one command. A claim of 153 tests is checked by counting.
 2. **Does the code do what the task said?** Read the implementation, not the diff summary.
 3. **Would the wrong implementation also pass?** This is the question that produces useful findings. It is how `test_audit_events_survive_project_deletion` was found to mask the behaviour it tested.
 

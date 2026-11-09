@@ -152,7 +152,29 @@ class GeminiClient:
         latency_ms = int((time.monotonic() - started) * 1000)
 
         usage = body.get("usageMetadata") or {}
-        text = self._extract_text(body)
+        tokens = {
+            "input_tokens": int(usage.get("promptTokenCount") or 0),
+            "output_tokens": int(usage.get("candidatesTokenCount") or 0),
+        }
+
+        try:
+            text = self._extract_text(body)
+        except AiInvalidOutput:
+            # A response with no candidate text is still an attempt that cost
+            # money. Recording nothing leaves a hole exactly where the
+            # failures are.
+            self._emit(
+                AiCall(
+                    module=module,
+                    model=self._model,
+                    prompt_hash=digest,
+                    status="parse_error",
+                    latency_ms=latency_ms,
+                    **tokens,
+                ),
+                project_id,
+            )
+            raise
 
         try:
             parsed = json.loads(text)

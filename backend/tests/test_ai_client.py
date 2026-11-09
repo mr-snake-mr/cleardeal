@@ -134,7 +134,9 @@ def test_latency_is_actually_measured(db):
     client = GeminiClient(api_key="k", model="m", transport=slow, record=make_recorder(db))
     client.generate(module="m1", prompt="p", schema=Answer)
 
-    # Lower bound only: a loaded machine makes the upper one flaky, and the\n    # claim being tested is "the timer runs", not "it is precise".\n    assert db.execute(select(AiRun)).scalar_one().latency_ms >= 10
+    # Lower bound only: a loaded machine makes the upper one flaky, and the
+    # claim being tested is "the timer runs", not "it is precise".
+    assert db.execute(select(AiRun)).scalar_one().latency_ms >= 10
 
 
 def test_the_prompt_hash_is_stable_and_sensitive(db):
@@ -233,6 +235,21 @@ def test_output_missing_a_field_raises_and_is_recorded(db):
 def test_a_response_with_no_candidate_text_raises(db):
     with pytest.raises(AiInvalidOutput):
         _client(db, {"candidates": []}).generate(module="m1", prompt="p", schema=Answer)
+
+
+def test_a_response_with_no_candidate_text_is_still_recorded(db):
+    """One row per attempt, including the attempts that produce no text.
+
+    A log with holes is worse than no log: the missing rows are exactly the
+    failures you would want to count.
+    """
+    with pytest.raises(AiInvalidOutput):
+        _client(db, {"candidates": []}).generate(module="m1", prompt="p", schema=Answer)
+
+    rows = db.execute(select(AiRun)).scalars().all()
+
+    assert len(rows) == 1
+    assert rows[0].validation_status == "parse_error"
 
 
 def test_a_missing_api_key_fails_before_calling_the_provider(db):
