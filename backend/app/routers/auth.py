@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import User
 from app.schemas.auth import LoginRequest, RegisterRequest, UserOut
 from app.security import issue_session, read_session
 from app.services import auth as auth_service
@@ -57,7 +56,7 @@ SessionUserId = Annotated[uuid.UUID, Depends(session_user_id)]
 
 def require_user(db: DbSession, user_id: SessionUserId) -> UserOut:
     """Depends on `session_user_id`, so a forged token never reaches this."""
-    user = db.get(User, user_id)
+    user = auth_service.load_user(db, user_id=user_id)
     if user is None:
         # Valid signature, deleted account: treated as signed out rather than as
         # a 500 further down the request.

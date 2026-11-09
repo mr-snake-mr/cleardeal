@@ -29,6 +29,15 @@ class EmailAlreadyRegistered(Exception):
         self.email = email
 
 
+def load_user(db: Session, *, user_id) -> User | None:
+    """The only place a session id becomes a user row.
+
+    A router that imported `User` directly would be doing this itself, and
+    docs/06 §2 forbids that: routes may not reach into the model layer.
+    """
+    return db.get(User, user_id)
+
+
 def register(db: Session, *, email: str, name: str, password: str) -> User:
     existing = db.execute(select(User.id).where(User.email == email)).scalar_one_or_none()
     if existing is not None:
