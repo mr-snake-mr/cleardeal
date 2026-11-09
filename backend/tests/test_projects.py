@@ -7,10 +7,10 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, func, select, text
 
 from app.database import SessionLocal
-from app.models import Project, User
+from app.models import AuditEvent, Project, User
 
 GOOD = {
     "name": "Marketing site",
@@ -73,6 +73,19 @@ def test_create_returns_201_the_project_and_a_draft_status(client):
     assert body["id"]
 
 
+def test_creation_writes_exactly_one_audit_event(client, db):
+    """docs/08 §1: every mutating endpoint writes one audit row, same transaction."""
+    _signup(client)
+    project_id = uuid.UUID(_create(client).json()["id"])
+    assert client.get("/api/v1/projects").status_code == 200
+
+    rows = db.execute(select(AuditEvent).where(AuditEvent.project_id == project_id)).scalars().all()
+
+    assert len(rows) == 1
+    assert rows[0].event_type == "PROJECT_CREATED"
+    assert rows[0].actor_id is not None
+
+
 def test_budget_is_serialised_as_a_fixed_scale_string(client):
     """Catches a schema that emits 300.0 or a float: money on the wire is a string."""
     _signup(client)
@@ -91,9 +104,11 @@ def test_budget_is_stored_exactly(client, db):
 
 
 @pytest.mark.parametrize("budget", ["0.00", "-5.00"])
-def test_budget_must_be_positive(client, budget):
+def test_budget_must_be_positive(client, db, budget):
+    """docs/01 F-1: 422 **and no project**. The second half is the whole point."""
     _signup(client)
     assert _create(client, budget_amount=budget).status_code == 422
+    assert db.execute(select(func.count()).select_from(Project)).scalar_one() == 0
 
 
 def test_budget_rejects_sub_cent_precision(client):
@@ -127,6 +142,24 @@ def test_unknown_field_is_rejected(client):
 def test_invalid_client_email_is_422(client):
     _signup(client)
     assert _create(client, client_email="not-an-email").status_code == 422
+
+
+def test_validation_errors_use_the_documented_envelope(client):
+    """docs/08 §1: {code, message, details} at the top level, not {"detail": ...}."""
+    _signup(client)
+    body = _create(client, budget_amount="0.00").json()
+
+    assert body["code"] == "VALIDATION_ERROR"
+    assert isinstance(body["message"], str) and body["message"]
+    assert "budget_amount" in body["details"]["fields"]
+    assert "detail" not in body
+
+
+def test_not_found_uses_the_documented_envelope(client):
+    _signup(client)
+    body = client.get("/api/v1/projects/00000000-0000-4000-8000-000000000000").json()
+    assert body["code"] == "NOT_FOUND"
+    assert "detail" not in body
 
 
 def test_unauthenticated_create_is_401(client):
@@ -207,10 +240,37 @@ def test_malformed_project_id_is_422(client):
 
 
 def test_creation_attributes_the_project_to_the_session_user(client, db):
-    """Catches an owner_id taken from the request body instead of the session."""
-    user_id = uuid.UUID(_signup(client).json()["id"])
+    """Two users on purpose.
+
+    With one user in the table, `owner_id = <first user>` passes; only a second
+    account makes the assertion mean "the session's user".
+    """
+    _signup(client, "a@example.test")
+    client.cookies.clear()
+    user_b = uuid.UUID(_signup(client, "b@example.test").json()["id"])
+
     project_id = uuid.UUID(_create(client).json()["id"])
 
     owner_id = db.execute(select(Project.owner_id).where(Project.id == project_id)).scalar_one()
 
-    assert owner_id == user_id
+    assert owner_id == user_b
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("post", "/api/v1/projects"),
+        ("get", "/api/v1/projects"),
+        ("get", "/api/v1/projects/00000000-0000-4000-8000-000000000000"),
+    ],
+)
+def test_every_route_rejects_an_unauthenticated_request(client, method, path):
+    """Catches a router that drops `CurrentUser` from one route.
+
+    A GET losing its dependency would expose every project of every user, and
+    nothing else in this file would notice.
+    """
+    client.cookies.clear()
+    response = client.get(path) if method == "get" else client.post(path, json=GOOD)
+    assert response.status_code == 401
+    assert response.json()["code"] == "UNAUTHENTICATED"

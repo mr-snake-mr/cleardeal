@@ -9,9 +9,9 @@
 | Area | State | Evidence |
 |---|---|---|
 | Dossier 00–17 | complete | this directory |
-| Backend: schema, money, auth | blocks 1.1–1.5 done | 75 tests, 98.09% coverage, `ruff` clean |
+| Backend: schema, money, auth, projects | blocks 1.1–1.6 done | 100 tests, 98.29% coverage, `ruff` clean |
 | Schema + migration | done | 14 tables, 11 indexes; `upgrade → downgrade → upgrade` clean |
-| Projects, AI, PayPal, frontend | not started | Day 1 block 1.6+ per [13](13-SCHEDULE.md) |
+| AI, PayPal, frontend | not started | Day 1 block 1.7+ per [13](13-SCHEDULE.md) |
 
 Definition of done: [15 §7](15-MVP-SCOPE.md). Open assumptions: [16](16-UNVERIFIED-ASSUMPTIONS.md) — A-1 and A-2 are the two that can change what the product is allowed to say.
 

@@ -436,7 +436,15 @@ def test_audit_events_survive_project_deletion(db):
         )
     )
     db.flush()
-    event_id = db.query(AuditEvent).filter_by(event_type="PROJECT_CREATED").one().id
+    # Scoped to this project: rows committed by other test modules are visible
+    # in the shared session database, and "the only audit row" is not a fact
+    # this test owns.
+    event_id = (
+        db.query(AuditEvent)
+        .filter_by(event_type="PROJECT_CREATED", project_id=project.id)
+        .one()
+        .id
+    )
 
     # The database performs the SET NULL. If the FK were CASCADE this fails,
     # because the row would be gone.

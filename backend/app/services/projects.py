@@ -13,7 +13,7 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Project
+from app.models import AuditEvent, Project
 from app.schemas.projects import ProjectCreate
 
 
@@ -27,6 +27,17 @@ def create(db: Session, *, owner_id: uuid.UUID, payload: ProjectCreate) -> Proje
         deadline=payload.deadline,
     )
     db.add(project)
+    # Same transaction as the write, so the log cannot outlive a rollback and
+    # cannot be skipped by a caller that forgets (docs/08 §1).
+    db.flush()
+    db.add(
+        AuditEvent(
+            project_id=project.id,
+            actor_id=owner_id,
+            event_type="PROJECT_CREATED",
+            payload={"name": project.name, "budget_amount": f"{payload.budget_amount:.2f}"},
+        )
+    )
     db.commit()
     db.refresh(project)
     return project

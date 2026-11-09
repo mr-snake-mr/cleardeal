@@ -2,7 +2,7 @@
 
 **The test suite is a claim about behaviour, and every test must be able to fail.** A test that would still pass if the feature were deleted is worse than no test — it manufactures false confidence, which is exactly what a judge probes for.
 
-Current state: **75 tests, 98.09% statement coverage, all green**, `ruff` clean, migration round-trip clean.
+Current state: **100 tests, 98.29% statement coverage, all green**, `ruff` clean, migration round-trip clean.
 
 ## 1. Pyramid
 
@@ -26,7 +26,7 @@ The AI provider and PayPal **are** faked at the HTTP boundary (`respx`), because
 | Every error code in doc 08 §1 | Generated code |
 | Every claim in doc 03's evidence table | Anything already covered by a type |
 
-Coverage is a floor, not a goal: **80% enforced in `pyproject.toml`**, currently 99%. A new module that drops total coverage below 80 fails the run. Coverage does not prove correctness, so the tests that matter are listed by name below.
+Coverage is a floor, not a goal: **80% enforced in `pyproject.toml`**, currently 98.29%. A new module that drops total coverage below 80 fails the run. Coverage does not prove correctness, so the tests that matter are listed by name below.
 
 ## 3. The tests that carry the product
 
@@ -77,7 +77,7 @@ A test suite is only as good as its ability to fail. For each of these, the impl
 | Accept any quote without the substring check | `test_quote_not_in_body_downgrades` — **planned, Block 2.6**; until it exists, nothing catches this |
 | Remove the `desc()` → plain-index fix | `test_declared_indexes_exist_in_the_database` |
 
-This table is the difference between "we have 75 tests" and "we have 75 tests that do something".
+This table is the difference between "we have 100 tests" and "we have 100 tests that do something".
 
 ## 6. Test data
 
@@ -90,7 +90,7 @@ This table is the difference between "we have 75 tests" and "we have 75 tests th
 
 ```
 ruff check .            # style, unused imports, undefined names
-pytest                  # 75 tests, 80% floor enforced
+pytest                  # 100 tests, 80% floor enforced
 alembic upgrade head    # on an empty DB
 alembic downgrade base  # must be clean
 alembic upgrade head    # round-trip must be idempotent
@@ -130,7 +130,7 @@ A-2 in particular: the first real capture either confirms the payee field or for
 Not "the tests pass". A run is green when, in one invocation:
 
 1. `ruff` reports zero issues,
-2. `pytest` reports 75 passed and coverage ≥ 80%,
+2. `pytest` reports 100 passed and coverage ≥ 80%,
 3. the migration round-trip is clean,
 4. `tsc --noEmit` is silent,
 5. `vite build` succeeds,

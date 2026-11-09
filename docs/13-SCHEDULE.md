@@ -24,7 +24,7 @@ Dossier 00–17, skill gate established, `git init` before the first file.
 | 1.8 | Boundary test (`routers/` may not import `models/`), ruff clean | `test_boundaries.py` |
 
 **Gate G1:** 70+ tests green, coverage ≥ 80%, migration round-trip clean, audit PASS on Tasks 1–5.
-**Status: blocks 1.1–1.5 complete** — repo, config, `Money`, `database.py`, 14 models, 8 named indexes (11 `create_index` calls), generated migration, schema tests, and auth (75 tests, 98.09%, round-trip proven). Block 1.6 onward are unstarted.
+**Status: blocks 1.1–1.6 complete** — repo, config, `Money`, `database.py`, 14 models, generated migration, schema tests, auth, and project create/list/read with a single error envelope (100 tests, 98.29%, round-trip proven). Block 1.7 onward are unstarted.
 
 **Risk on Day 1:** this is the highest-risk day because nothing is demoable at the end of it. Resist the urge to jump to the UI; every later day assumes the schema is right.
 
