@@ -12,7 +12,7 @@ import uuid
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.projects import MoneyStr
 
@@ -80,3 +80,33 @@ class VersionOut(BaseModel):
     client_approved_at: datetime | None
     sections: list[SectionOut]
     milestones: list[MilestoneOut]
+
+
+class MilestoneIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ordinal: int = Field(ge=1)
+    title: str = Field(min_length=3, max_length=200)
+    deliverables: list[str] = Field(min_length=1, max_length=20)
+    acceptance: list[str] = Field(min_length=1, max_length=20)
+    amount: MoneyStr
+
+
+class AgreementPatch(BaseModel):
+    """The pricing step, and the only place a human sets a number for a change.
+
+    `budget_amount` and `milestones` travel together on purpose: raising one
+    without the other is exactly the mismatch the sum check exists to catch, so
+    the API lets a client send either and the service judges the combined result.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    budget_amount: MoneyStr | None = None
+    milestones: list[MilestoneIn] | None = Field(default=None, max_length=20)
+
+    @model_validator(mode="after")
+    def _at_least_one(self):
+        if not self.model_fields_set:
+            raise ValueError("send budget_amount or milestones")
+        return self

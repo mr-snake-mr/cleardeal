@@ -56,3 +56,10 @@ class ChangeRequestOut(BaseModel):
 class ChangeCheckOut(BaseModel):
     change_request: ChangeRequestOut
     items: list[ChangeItemOut]
+
+
+class ChangeApprovalOut(BaseModel):
+    id: uuid.UUID
+    status: str
+    # Set only when this signature was the second one.
+    resulting_version_id: uuid.UUID | None = None

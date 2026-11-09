@@ -108,25 +108,31 @@ def _clean_database():
 
 @pytest.fixture
 def client_side():
-    """A second browser, with its own cookie jar.
+    """The client as a persistent second principal.
 
-    The client is a different principal now, so it cannot share the owner's
-    session: approving from the same jar would be exactly the A-15 hole this
-    replaced. Returns the response of the client's approval.
+    One TestClient per address, kept alive for the test: the first call accepts
+    the invitation and gets a session, later calls reuse it. A client with no
+    password cannot sign in twice and the link is single use, so the session has
+    to survive - exactly as a browser tab would.
     """
+    sessions = {}
 
-    def run(owner_client, project_id, version_id, email="client@example.test"):
-        invited = owner_client.post(
-            f"/api/v1/projects/{project_id}/invitations", json={"email": email}
-        )
-        assert invited.status_code == 201, invited.text
-        token = invited.json()["invite_url"].rsplit("/", 1)[-1]
-
-        with TestClient(create_app(), base_url="https://testserver") as other:
+    def run(owner_client, project_id, version_id, email="client@example.test", path=None):
+        other = sessions.get(email)
+        if other is None:
+            invited = owner_client.post(
+                f"/api/v1/projects/{project_id}/invitations", json={"email": email}
+            )
+            assert invited.status_code == 201, invited.text
+            token = invited.json()["invite_url"].rsplit("/", 1)[-1]
+            other = TestClient(create_app(), base_url="https://testserver")
             accepted = other.post(f"/api/v1/invitations/{token}/accept")
             assert accepted.status_code == 200, accepted.text
-            return other.post(
-                f"/api/v1/agreements/{version_id}/approve", json={"role": "client"}
-            )
+            sessions[email] = other
+        if path is not None:
+            return other.post(f"/api/v1{path}", json={"role": "client"})
+        return other.post(
+            f"/api/v1/agreements/{version_id}/approve", json={"role": "client"}
+        )
 
     return run

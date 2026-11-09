@@ -19,9 +19,17 @@ from app.ai.client import AiInvalidOutput, AiInvalidRequest, AiUnavailable
 from app.ai.client import get_client as get_ai_client
 from app.database import get_db
 from app.routers.auth import CurrentUser
-from app.schemas.changes import ChangeCheckOut, ChangeCreate, ChangeItemOut, ChangeRequestOut
+from app.schemas.agreements import ApproveRequest
+from app.schemas.changes import (
+    ChangeApprovalOut,
+    ChangeCheckOut,
+    ChangeCreate,
+    ChangeItemOut,
+    ChangeRequestOut,
+)
 from app.services import changes as change_service
 from app.services import projects as project_service
+from app.services.agreements import RoleNotYours
 from app.services.ai_runs import make_recorder
 
 router = APIRouter(tags=["changes"])
@@ -109,3 +117,40 @@ def get_change(request_id: uuid.UUID, user: CurrentUser, db: DbSession) -> Chang
         raise _not_found()
     request, items = found
     return _out(request, items)
+
+
+@router.post("/changes/{request_id}/approve", response_model=ChangeApprovalOut)
+def approve_change(
+    request_id: uuid.UUID, payload: ApproveRequest, user: CurrentUser, db: DbSession
+) -> ChangeApprovalOut:
+    request = change_service.get_request_for_participant(
+        db, request_id=request_id, actor=user
+    )
+    if request is None:
+        raise _not_found()
+    try:
+        approved, resulting = change_service.approve_request(
+            db, request=request, role=payload.role, actor=user, now=datetime.now(UTC)
+        )
+    except RoleNotYours as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ROLE_NOT_YOURS",
+                "message": (
+                    f"This account may not sign as the {exc.role}. The owner signs as "
+                    "freelancer; the client signs from the account named on the invitation."
+                ),
+                "details": {"role": exc.role},
+            },
+        ) from None
+    except change_service.ChangeNotOpen as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "INVALID_STATE", "message": str(exc)},
+        ) from None
+    return ChangeApprovalOut(
+        id=approved.id,
+        status=approved.status,
+        resulting_version_id=resulting.id if resulting else None,
+    )

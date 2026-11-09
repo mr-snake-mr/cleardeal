@@ -165,6 +165,12 @@ class ChangeRequest(Base):
     status: Mapped[str] = mapped_column(
         String(20), default="ANALYSING", server_default=text("'ANALYSING'")
     )
+    freelancer_approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    client_approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

@@ -27,7 +27,7 @@ import uuid
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Protocol
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -468,3 +468,64 @@ def _project_id(db: Session, version: AgreementVersion) -> uuid.UUID:
     agreement = db.get(Agreement, version.agreement_id)
     assert agreement is not None  # noqa: S101 - FK makes this impossible
     return agreement.project_id
+
+
+def replace_terms(
+    db: Session,
+    *,
+    version: AgreementVersion,
+    budget: Decimal | None,
+    milestones: list | None,
+    actor_id: uuid.UUID,
+) -> AgreementVersion:
+    """Re-price a DRAFT. Nothing else may be edited here.
+
+    The sum is judged on the *combined* result: sending a new budget with old
+    milestones is a legitimate request that will fail the check, which is better
+    than silently accepting half a change.
+    """
+    if version.status != "DRAFT":
+        raise InvalidState(version.status, "DRAFT")
+
+    new_budget = budget if budget is not None else Decimal(version.budget_amount)
+    if milestones is not None:
+        total = sum((Decimal(str(item.amount)) for item in milestones), start=Decimal("0.00"))
+    else:
+        total = sum((m.amount for m in version.milestones), start=Decimal("0.00"))
+    if total != new_budget:
+        raise MilestoneSumMismatch(new_budget, total)
+
+    if milestones is not None:
+        db.execute(delete(Milestone).where(Milestone.version_id == version.id))
+        for item in milestones:
+            db.add(
+                Milestone(
+                    version_id=version.id,
+                    ordinal=item.ordinal,
+                    title=item.title,
+                    deliverables=list(item.deliverables),
+                    acceptance=list(item.acceptance),
+                    amount=Decimal(str(item.amount)),
+                )
+            )
+    version.budget_amount = new_budget
+    db.flush()
+    db.refresh(version)
+    version.content_hash = content_hash_for(version)
+
+    agreement = db.get(Agreement, version.agreement_id)
+    db.add(
+        AuditEvent(
+            project_id=agreement.project_id if agreement else None,
+            actor_id=actor_id,
+            event_type="AGREEMENT_REVISED",
+            payload={
+                "version_no": version.version_no,
+                "budget": f"{new_budget:.2f}",
+                "milestones": len(version.milestones),
+            },
+        )
+    )
+    db.commit()
+    db.refresh(version)
+    return version

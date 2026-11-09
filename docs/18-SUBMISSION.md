@@ -39,7 +39,7 @@ an error that hides it.
 | Two signatures need two people | magic-link invitation → passwordless client user → `approve` binds role to principal; the owner gets `409 ROLE_NOT_YOURS` signing as client |
 | Money is never a float | integer cents at the AI boundary, `NUMERIC(12,2)` on Postgres, `Decimal` at every service edge, and a strict type that rejects `"10.00"` |
 
-`301 tests, 93.25% coverage, ruff clean`, migrations proven by a full
+`306 tests, 92.65% coverage, ruff clean`, migrations proven by a full
 upgrade → downgrade → upgrade round trip, 14 tables with enforced foreign keys on
 SQLite.
 

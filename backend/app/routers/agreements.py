@@ -23,6 +23,7 @@ from app.database import get_db
 from app.routers.auth import CurrentUser
 from app.schemas.agreements import (
     AgreementCreate,
+    AgreementPatch,
     ApproveRequest,
     MilestoneOut,
     RejectRequest,
@@ -241,3 +242,23 @@ def reject_agreement(
         )
     except agreement_service.AgreementError as exc:
         raise _refusal(exc) from None
+
+
+@router.patch("/agreements/{version_id}", response_model=VersionOut)
+def revise_agreement(
+    version_id: uuid.UUID, payload: AgreementPatch, user: CurrentUser, db: DbSession
+) -> VersionOut:
+    version = agreement_service.get_for_owner(db, owner_id=user.id, version_id=version_id)
+    if version is None:
+        raise _not_found()
+    try:
+        revised = agreement_service.replace_terms(
+            db,
+            version=version,
+            budget=payload.budget_amount,
+            milestones=payload.milestones,
+            actor_id=user.id,
+        )
+    except agreement_service.AgreementError as exc:
+        raise _refusal(exc) from None
+    return _out(revised)

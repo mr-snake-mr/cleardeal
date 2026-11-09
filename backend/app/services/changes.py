@@ -28,7 +28,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai.schemas import ChangeAnalysis, Citation, ScopeItem
@@ -39,7 +39,14 @@ from app.models import (
     AuditEvent,
     ChangeItem,
     ChangeRequest,
+    Invitation,
+    Milestone,
     Project,
+)
+from app.services.agreements import (
+    AgreementError,
+    RoleNotYours,
+    content_hash_for,
 )
 
 # Below this, a quote matches almost any section and proves nothing.
@@ -278,3 +285,180 @@ def get_for_owner(
         select(ChangeItem).where(ChangeItem.request_id == request.id).order_by(ChangeItem.feature)
     ).all()
     return request, list(items)
+
+
+# ------------------------------------------------------- approving a change
+
+class ChangeNotOpen(AgreementError):
+    def __init__(self, status: str) -> None:
+        self.status = status
+        super().__init__(f"this change request is {status}")
+
+
+def _may_sign(db: Session, *, request: ChangeRequest, role: str, actor) -> None:
+    """Same rule as the agreement: the owner signs as freelancer, and the client
+    role opens only for the account named on this project's invitation."""
+    project = db.get(Project, request.project_id)
+    if project is None:
+        raise RoleNotYours(role)
+    if role == "freelancer":
+        if actor.id != project.owner_id:
+            raise RoleNotYours(role)
+        return
+    if actor.id == project.owner_id:
+        raise RoleNotYours(role)
+    named = db.scalars(
+        select(Invitation).where(
+            Invitation.project_id == project.id,
+            func.lower(Invitation.email) == actor.email.lower(),
+        )
+    ).one_or_none()
+    if named is None:
+        raise RoleNotYours(role)
+
+
+def get_request_for_participant(db: Session, *, request_id: uuid.UUID, actor):
+    request = db.get(ChangeRequest, request_id)
+    if request is None:
+        return None
+    project = db.get(Project, request.project_id)
+    if project is None:
+        return None
+    if project.owner_id == actor.id:
+        return request
+    named = db.scalars(
+        select(Invitation).where(
+            Invitation.project_id == project.id,
+            func.lower(Invitation.email) == actor.email.lower(),
+        )
+    ).one_or_none()
+    return request if named is not None else None
+
+
+def approve_request(
+    db: Session, *, request: ChangeRequest, role: str, actor, now: datetime
+) -> tuple[ChangeRequest, AgreementVersion | None]:
+    """One signature at a time; the second one drafts the next version."""
+    if request.status != "PROPOSED":
+        raise ChangeNotOpen(request.status)
+    _may_sign(db, request=request, role=role, actor=actor)
+
+    if role == "freelancer":
+        request.freelancer_approved_at = now
+    else:
+        request.client_approved_at = now
+
+    resulting: AgreementVersion | None = None
+    if request.freelancer_approved_at and request.client_approved_at:
+        request.status = "APPROVED"
+        resulting = _draft_next_version(db, request=request, actor_id=actor.id)
+
+    db.add(
+        AuditEvent(
+            project_id=request.project_id,
+            actor_id=actor.id,
+            event_type="CHANGE_REQUEST_APPROVED",
+            payload={
+                "change_request_id": str(request.id),
+                "role": role,
+                "resulting_version_id": str(resulting.id) if resulting else None,
+            },
+        )
+    )
+    db.commit()
+    db.refresh(request)
+    return request, resulting
+
+
+def _draft_next_version(
+    db: Session, *, request: ChangeRequest, actor_id: uuid.UUID
+) -> AgreementVersion:
+    """Copy the signed version, record what was accepted, price nothing.
+
+    The new version carries the old budget and the old milestones on purpose. A
+    rule that invented a price here would be the model making a commercial
+    decision, and the sum invariant would then be checking the model against
+    itself. Instead the draft is unshippable until a human edits it.
+    """
+    base = db.get(AgreementVersion, request.base_version_id)
+    if base is None:
+        raise ChangeNotOpen("no base version")
+
+    agreement = db.get(Agreement, base.agreement_id)
+    if agreement is None:
+        raise ChangeNotOpen("no agreement")
+
+    draft = AgreementVersion(
+        agreement_id=agreement.id,
+        version_no=agreement.current_version + 1,
+        status="DRAFT",
+        budget_amount=base.budget_amount,
+        created_by=actor_id,
+        content_hash="0" * 64,
+    )
+    db.add(draft)
+    db.flush()
+
+    for section in db.scalars(
+        select(AgreementSection).where(AgreementSection.version_id == base.id)
+    ).all():
+        db.add(
+            AgreementSection(
+                version_id=draft.id,
+                section_key=section.section_key,
+                title=section.title,
+                body=section.body,
+                ordinal=section.ordinal,
+            )
+        )
+
+    items = db.scalars(
+        select(ChangeItem)
+        .where(
+            ChangeItem.request_id == request.id,
+            ChangeItem.classification != "NEEDS_CLARIFICATION",
+        )
+        .order_by(ChangeItem.feature)
+    ).all()
+    lines = [f"- {item.feature} ({item.classification}): {item.explanation}" for item in items]
+    quotes = [
+        f'  cited: "{evidence["quote"]}" in {evidence["section_key"]}'
+        for item in items
+        for evidence in item.evidence
+    ]
+    body = (
+        "The following requests were accepted against version "
+        f"{base.version_no} and are recorded here. Amounts for this work are set "
+        "by the parties in the milestones; this section does not price them.\n\n"
+        + "\n".join(lines + quotes)
+    )
+    db.add(
+        AgreementSection(
+            version_id=draft.id,
+            section_key="CHANGES",
+            title="Agreed changes",
+            body=body,
+            ordinal=99,
+        )
+    )
+
+    for milestone in db.scalars(
+        select(Milestone).where(Milestone.version_id == base.id).order_by(Milestone.ordinal)
+    ).all():
+        db.add(
+            Milestone(
+                version_id=draft.id,
+                ordinal=milestone.ordinal,
+                title=milestone.title,
+                deliverables=list(milestone.deliverables),
+                acceptance=list(milestone.acceptance),
+                amount=milestone.amount,
+                due_date=milestone.due_date,
+            )
+        )
+
+    db.flush()
+    db.refresh(draft)
+    agreement.current_version = draft.version_no
+    draft.content_hash = content_hash_for(draft)
+    return draft
