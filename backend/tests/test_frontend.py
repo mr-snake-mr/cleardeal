@@ -48,7 +48,7 @@ def test_every_endpoint_the_page_calls_still_exists(client):
 
 
 def test_the_page_requires_two_principals(client):
-    """A-11 is closed, so the page must offer the invitation and must not imply
+    """A-15 is closed, so the page must offer the invitation and must not imply
     that the same session can sign both sides."""
     html = client.get(PAGE).text
 

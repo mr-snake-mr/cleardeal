@@ -117,7 +117,7 @@ Rule for the build: an assumption that turns out false must change the documents
 | **How to close** | One provider sandbox key and a 20-line sender |
 | **Severity** | Low for judging, medium for honesty — the review page must be reachable in the demo, so the link is copied rather than emailed |
 
-### A-12 — "Verified" means the quote matches the draft, not the client's words
+### A-16 — "Verified" means the quote matches the draft, not the client's words
 
 | | |
 |---|---|
@@ -128,12 +128,12 @@ Rule for the build: an assumption that turns out false must change the documents
 | **How to close** | Anchor each generated section to the brief requirement it satisfies; add `downgrade_reason` to `change_items`; show the quote inline in the review UI |
 | **Severity** | High for the marketing sentence, none for the demo — the mechanism is real, the wording must be narrower |
 
-### A-11 — A client approval can be attributed to the client
+### A-15 — A client approval can be attributed to the client
 
 | | |
 |---|---|
 | **Assumption** | `POST /agreements/{id}/approve` with `{"role": "client"}` represents the client's decision |
-| **Status** | **Closed.** Magic-link invitations issue a session for the invited address, and `approve` binds a role to a principal: the owner may sign only as freelancer, and only an account that accepted an invitation for this project may sign as client. Anything else is `409 ROLE_NOT_YOURS`, and the audit payload now says `role_source: session` rather than `self_asserted`. Proved by `test_two_distinct_principals_sign_and_the_agreement_is_approved` and `test_the_owner_cannot_sign_as_the_client` |
+| **Status** | **Closed.** Magic-link invitations issue a session for the invited address, and `approve` binds a role to a principal: the owner may sign only as freelancer, and only an account **named on this project's invitation** may sign as client. Acceptance mints a session for a client who has no account; it is not what authorises a signature, because a client who already has an account can never accept the link (see A-17). Anything else is `409 ROLE_NOT_YOURS`, and the audit payload now says `role_source: session` rather than `self_asserted`. Proved by `test_two_distinct_principals_sign_and_the_agreement_is_approved` and `test_the_owner_cannot_sign_as_the_client` |
 | **If false** | The timeline shows two approvals from one account. A judge who notices concludes the dual-approval claim is theatre — which would be correct |
 | **How to close** | Magic-link exchange (block 1.5, unbuilt) plus a distinct actor id per approval, and `approve` refusing a second role from the same actor |
 | **Severity** | High for the claim, low for the demo path — the payment path only needs the version to reach `APPROVED` |
@@ -189,3 +189,13 @@ Maintained as assumptions get resolved. Empty until Block 2.2 runs.
 | — | — | — | — |
 
 An assumption is only closed by an observation with a saved artefact. "It should work" closes nothing.
+
+### A-17 — The invitation link is returned to the inviter
+
+| | |
+|---|---|
+| **Assumption** | Returning `invite_url` in the API response stands in for sending an email |
+| **Status** | **True for the demo.** No mail is sent, so the token comes back in the response and the person who sent the invitation can read it. Safe only because `accept` refuses any address that already has an account (`409 EMAIL_ALREADY_REGISTERED`): a link can create a new principal, never assume an existing one. Before that refusal it was account takeover - the audit found it, and `tests/test_access_hardening.py::test_a_link_cannot_sign_in_an_account_that_already_exists` proves the closure |
+| **If the refusal is ever removed** | The link becomes a password |
+| **How to close** | Send the link by email and stop returning it; one `send_email` call and a test that the field is absent |
+| **Severity** | Low now, critical if the refusal goes |

@@ -111,7 +111,7 @@ def client_side():
     """A second browser, with its own cookie jar.
 
     The client is a different principal now, so it cannot share the owner's
-    session: approving from the same jar would be exactly the A-11 hole this
+    session: approving from the same jar would be exactly the A-15 hole this
     replaced. Returns the response of the client's approval.
     """
 

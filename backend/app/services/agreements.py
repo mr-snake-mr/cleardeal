@@ -77,7 +77,7 @@ class RoleNotYours(AgreementError):
     """A signature by someone who is not that party.
 
     Until this existed, `role` was whatever the request body said and the only
-    caller was the owner, so one person could sign both sides (docs/16 A-11).
+    caller was the owner, so one person could sign both sides (docs/16 A-15).
     """
 
     def __init__(self, role: str) -> None:
@@ -435,7 +435,7 @@ def approve(
                 # Honesty about the evidence: the role is asserted by the
                 # caller, not proven by a second session. Without this the log
                 # reads as "the client approved", which is a claim the log
-                # cannot support (docs/16 A-11).
+                # cannot support (docs/16 A-15).
                 "role_source": "session",
             },
         )

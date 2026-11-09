@@ -1,6 +1,6 @@
 """Client access: a magic link, and two principals who cannot be one person.
 
-This is the block that deletes A-11. Until now `role` was whatever the request
+This is the block that deletes A-15. Until now `role` was whatever the request
 body said, and the only caller who could reach `approve` was the owner — so one
 person could sign twice and the audit row said "the client approved".
 
@@ -235,7 +235,7 @@ def test_only_the_owner_can_invite(client, db, ai):
 
 
 def test_two_distinct_principals_sign_and_the_agreement_is_approved(client, db, ai):
-    """The replacement for A-11, and the assertion that ends the caveat."""
+    """The replacement for A-15, and the assertion that ends the caveat."""
     _signup(client)
     project, version = _project_and_version(client)
     client.post(f"/api/v1/agreements/{version['id']}/send", json={})
@@ -260,7 +260,7 @@ def test_two_distinct_principals_sign_and_the_agreement_is_approved(client, db, 
 
 
 def test_the_owner_cannot_sign_as_the_client(client, db, ai):
-    """The exact hole A-11 described: one person ticking both boxes."""
+    """The exact hole A-15 described: one person ticking both boxes."""
     _signup(client)
     _, version = _project_and_version(client)
     client.post(f"/api/v1/agreements/{version['id']}/send", json={})

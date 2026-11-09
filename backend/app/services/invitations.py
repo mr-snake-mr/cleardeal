@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-import uuid
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
@@ -47,7 +46,7 @@ class InvitationExpired(InvitationError):
 
 
 class SelfInvitation(InvitationError):
-    """The owner inviting their own address is the cheap version of A-11."""
+    """The owner inviting their own address is the cheap version of A-15."""
 
     def __init__(self) -> None:
         super().__init__("the owner cannot be their own client")
@@ -147,14 +146,3 @@ def accept(db: Session, *, token: str, now: datetime) -> tuple[User, Invitation]
     db.commit()
     db.refresh(user)
     return user, invitation
-
-
-def accepted_for_project(db: Session, *, project_id: uuid.UUID, email: str):
-    """The invitation that authorises this account on this project, or None."""
-    return db.scalars(
-        select(Invitation).where(
-            Invitation.project_id == project_id,
-            func.lower(Invitation.email) == email.lower(),
-            Invitation.used_at.is_not(None),
-        )
-    ).one_or_none()

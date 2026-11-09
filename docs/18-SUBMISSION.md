@@ -39,7 +39,7 @@ an error that hides it.
 | Two signatures need two people | magic-link invitation → passwordless client user → `approve` binds role to principal; the owner gets `409 ROLE_NOT_YOURS` signing as client |
 | Money is never a float | integer cents at the AI boundary, `NUMERIC(12,2)` on Postgres, `Decimal` at every service edge, and a strict type that rejects `"10.00"` |
 
-`301 tests, 93.15% coverage, ruff clean`, migrations proven by a full
+`301 tests, 93.25% coverage, ruff clean`, migrations proven by a full
 upgrade → downgrade → upgrade round trip, 14 tables with enforced foreign keys on
 SQLite.
 
@@ -57,7 +57,7 @@ seventeen documents to avoid.
 3. **Evidence resolution proves the model agrees with the model.** Section bodies
    are M2's own output; nothing ties a generated section back to a quote from the
    brief. The honest phrasing is "this is what the agreement we generated says"
-   (docs/16 A-12).
+   (docs/16 A-16).
 4. **Negation is not detectable.** Quoting "included" out of "are not included"
    resolves. The quote is shown beside its section so a reader can see it.
 5. **No payouts, no escrow, no platform fee, no multiparty.** Multiparty needs
@@ -67,8 +67,8 @@ seventeen documents to avoid.
 
 ## Where the limits are written down
 
-- `docs/16-UNVERIFIED-ASSUMPTIONS.md` — A-1 … A-12, each with status, impact and
-  how to close it. A-11 is closed and says so.
+- `docs/16-UNVERIFIED-ASSUMPTIONS.md` — A-1 to A-17, each with status, impact and
+  how to close it. A-15 is closed and says so.
 - `docs/13-SCHEDULE.md` — every block, what is done, what is partial, and the
   deliberate deviations (`PATCH /agreements/{id}` is not built; corrections go
   through `v(n+1)`).

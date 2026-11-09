@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import base64
 import json
-import uuid
 import zlib
 from datetime import datetime
 
@@ -265,8 +264,3 @@ def load_event(raw: bytes) -> dict:
     if not isinstance(event, dict):
         raise ValueError("body was not a JSON object")
     return event
-
-
-def payment_id_or_none(db: Session, order_id: str) -> uuid.UUID | None:
-    payment = db.scalars(select(Payment).where(Payment.paypal_order_id == order_id)).one_or_none()
-    return payment.id if payment else None
