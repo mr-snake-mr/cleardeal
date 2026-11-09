@@ -32,6 +32,8 @@ class Settings(BaseSettings):
 
     # Constrained so a typo cannot silently produce a third environment.
     paypal_env: Literal["sandbox", "live"] = "sandbox"
+    # The webhook id PayPal issues for this app. Empty means nothing verifies.
+    paypal_webhook_id: str = ""
 
     # Signs session cookies. The default exists so `pytest` and a fresh clone
     # boot without ceremony; `create_app` refuses to start with it in `live`
