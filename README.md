@@ -19,7 +19,7 @@ That rejection rule is the whole product. An AI that reads contracts is not nove
 | Dossier `docs/00`–`docs/17` | complete, audited across two rounds (19 findings → 7 → PASS) |
 | Database schema, 14 tables, 8 named + 3 implicit indexes | done, migration reversible |
 | Money handling (exact cents, no float) | done, tested across both dialects' type bindings |
-| Test suite | **100 tests, 98.29% coverage, `ruff` clean** |
+| Test suite | **106 tests, 98.30% coverage, `ruff` clean** |
 | Auth (register, login, logout, session cookie) | done, 25 tests |
 | Projects, AI modules, PayPal, frontend, E2E | **not started** |
 
