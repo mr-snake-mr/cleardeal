@@ -54,4 +54,4 @@ def test_the_page_requires_two_principals(client):
 
     assert "/invitations" in html
     assert "Invite the client" in html
-    assert "Two signatures need two principals" in html
+    assert "its own session" in html

@@ -276,8 +276,8 @@ $("approve-client").addEventListener("click", async () => {
     renderVersion();
     say(
       "agreement-status",
-      "Approval refused unless you accepted the invitation for this project. " +
-      "Two signatures need two principals.",
+      "Each side signs from its own session: the freelancer here, the client " +
+      "from their own account or invitation link.",
       "bad",
     );
   } catch (error) { say("agreement-status", error.message, "bad"); }
