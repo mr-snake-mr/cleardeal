@@ -9,7 +9,7 @@
 | Area | State | Evidence |
 |---|---|---|
 | Dossier 00–17 | complete | this directory |
-| Backend: schema, money, auth, projects, merchants | blocks 1.1–1.8 done | 138 tests, 97.09% coverage, `ruff` clean |
+| Backend: schema, money, auth, projects, merchants | blocks 1.1–1.8 done | 151 tests, 96.35% coverage, `ruff` clean |
 | Schema + migration | done | 14 tables, 11 indexes; `upgrade → downgrade → upgrade` clean |
 | AI, PayPal, frontend | not started | Day 2 blocks per [13](13-SCHEDULE.md) |
 

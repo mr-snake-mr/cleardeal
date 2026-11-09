@@ -1,0 +1,264 @@
+"""Gemini client.
+
+Boundary note: this module may not import `app.models` (tests/test_boundaries.py).
+The call log is written through an injected `record` callable, and the writer
+lives in `app/services/ai_runs.py`. The AI layer stays pure: text in, validated
+object out, no database handle.
+
+Three decisions, each from a rule rather than taste:
+
+- **One retry, transient only.** `cost-aware-llm-pipeline`: "Never retry on
+  authentication or validation errors." A 400 from a bad schema will be a 400
+  again, and retrying it burns the demo's time budget.
+- **Output is untrusted.** `security-review`: model output is input. It is
+  parsed and validated against a Pydantic model before any caller sees it.
+- **The model name is a setting, not a literal**, so a swap appears in `ai_runs`
+  rather than silently in a diff.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import time
+import uuid
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+import httpx
+from pydantic import BaseModel, ValidationError
+
+from app.config import settings
+
+# Verified 2026-11-09 (docs/05 §7). Used only to report an estimate; nothing
+# bills against it.
+INPUT_USD_PER_1M = 0.75
+OUTPUT_USD_PER_1M = 3.75
+
+BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+
+class AiUnavailable(RuntimeError):
+    """Transport failure, 5xx after one retry, or no API key configured."""
+
+
+class AiInvalidOutput(RuntimeError):
+    """Unparseable JSON, or JSON that is not the shape the caller asked for."""
+
+
+@dataclass(frozen=True, slots=True)
+class AiCall:
+    """One attempt, as recorded. Frozen: a log entry that can be edited is not a log."""
+
+    module: str
+    model: str
+    prompt_hash: str
+    status: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    latency_ms: int = 0
+
+    @property
+    def estimated_cost_usd(self) -> float:
+        return (
+            self.input_tokens / 1_000_000 * INPUT_USD_PER_1M
+            + self.output_tokens / 1_000_000 * OUTPUT_USD_PER_1M
+        )
+
+
+class Recorder(Protocol):
+    """Injected by the service layer, which is allowed to import models."""
+
+    def __call__(self, call: AiCall, project_id: uuid.UUID | None) -> None: ...
+
+
+class Transport(Protocol):
+    def __call__(self, url: str, headers: dict, payload: dict) -> dict: ...
+
+
+def prompt_hash(prompt: str, schema: dict) -> str:
+    """Stable across calls, changes when either half changes.
+
+    Hashing the schema as well as the prompt is deliberate: changing a field name
+    changes the behaviour, and a log that cannot see that is a log that lies.
+    """
+    canonical = json.dumps({"prompt": prompt, "schema": schema}, sort_keys=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _default_transport(url: str, headers: dict, payload: dict) -> dict:
+    response = httpx.post(
+        url, headers=headers, json=payload, timeout=settings.ai_timeout_seconds
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+class GeminiClient:
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        model: str | None = None,
+        transport: Transport | None = None,
+        record: Recorder | None = None,
+    ) -> None:
+        self._api_key = api_key if api_key is not None else settings.gemini_api_key
+        self._model = model or settings.gemini_model
+        self._transport = transport or _default_transport
+        self._record = record
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    def generate(
+        self,
+        *,
+        module: str,
+        prompt: str,
+        schema: type[BaseModel],
+        project_id: uuid.UUID | None = None,
+    ) -> BaseModel:
+        if not self._api_key:
+            # Fail before spending anything, and record it: a missing key is an
+            # operator error, and it should be visible in the log rather than
+            # inferred from a wall of 503s.
+            self._emit(
+                AiCall(
+                    module=module,
+                    model=self._model,
+                    prompt_hash="",
+                    status="not_configured",
+                ),
+                project_id,
+            )
+            raise AiUnavailable("GEMINI_API_KEY is not configured")
+
+        schema_json = schema.model_json_schema()
+        digest = prompt_hash(prompt, schema_json)
+        payload = self._payload(prompt, schema_json)
+        url = f"{BASE_URL}/{self._model}:generateContent?key={self._api_key}"
+
+        started = time.monotonic()
+        body = self._call_with_one_retry(url, payload, module, digest, project_id)
+        latency_ms = int((time.monotonic() - started) * 1000)
+
+        usage = body.get("usageMetadata") or {}
+        text = self._extract_text(body)
+
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as exc:
+            self._emit(
+                AiCall(
+                    module=module,
+                    model=self._model,
+                    prompt_hash=digest,
+                    status="parse_error",
+                    input_tokens=int(usage.get("promptTokenCount") or 0),
+                    output_tokens=int(usage.get("candidatesTokenCount") or 0),
+                    latency_ms=latency_ms,
+                ),
+                project_id,
+            )
+            raise AiInvalidOutput("model returned unparseable JSON") from exc
+
+        try:
+            result = schema.model_validate(parsed)
+        except ValidationError as exc:
+            self._emit(
+                AiCall(
+                    module=module,
+                    model=self._model,
+                    prompt_hash=digest,
+                    status="schema_error",
+                    input_tokens=int(usage.get("promptTokenCount") or 0),
+                    output_tokens=int(usage.get("candidatesTokenCount") or 0),
+                    latency_ms=latency_ms,
+                ),
+                project_id,
+            )
+            raise AiInvalidOutput("model output failed schema validation") from exc
+
+        self._emit(
+            AiCall(
+                module=module,
+                model=self._model,
+                prompt_hash=digest,
+                status="ok",
+                input_tokens=int(usage.get("promptTokenCount") or 0),
+                output_tokens=int(usage.get("candidatesTokenCount") or 0),
+                latency_ms=latency_ms,
+            ),
+            project_id,
+        )
+        return result
+
+    # ---------------------------------------------------------------- internals
+
+    def _payload(self, prompt: str, schema_json: dict) -> dict:
+        return {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            # docs/05 §3.2: only minItems/maxItems survive; every other
+            # constraint is silently stripped, which is why Pydantic re-validates.
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseSchema": schema_json,
+                "temperature": 0.2,
+            },
+        }
+
+    def _call_with_one_retry(
+        self, url: str, payload: dict, module: str, digest: str, project_id: uuid.UUID | None
+    ) -> dict:
+        headers = {"Content-Type": "application/json"}
+        last: Exception | None = None
+        for attempt in (1, 2):
+            try:
+                return self._transport(url, headers, payload)
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                last = exc
+                if 400 <= status_code < 500:
+                    # Not retryable: a bad request stays bad, and a bad key is
+                    # not fixed by asking twice.
+                    self._emit(
+                        AiCall(
+                            module=module,
+                            model=self._model,
+                            prompt_hash=digest,
+                            status="client_error",
+                        ),
+                        project_id,
+                    )
+                    raise AiUnavailable(f"provider rejected the request ({status_code})") from exc
+            except (httpx.RequestError, TimeoutError) as exc:
+                last = exc
+            if attempt == 1:
+                continue
+        self._emit(
+            AiCall(module=module, model=self._model, prompt_hash=digest, status="transport_error"),
+            project_id,
+        )
+        raise AiUnavailable("provider unavailable after one retry") from last
+
+    @staticmethod
+    def _extract_text(body: dict) -> str:
+        try:
+            return body["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise AiInvalidOutput("response contained no candidate text") from exc
+
+    def _emit(self, call: AiCall, project_id: uuid.UUID | None) -> None:
+        if self._record is not None:
+            self._record(call, project_id)
+
+
+def get_client(record: Recorder | None = None, transport: Transport | None = None) -> GeminiClient:
+    """One place that builds a client, so tests have one seam to replace."""
+    return GeminiClient(record=record, transport=transport)
+
+
+def _unused(_: Any = None) -> None:  # pragma: no cover
+    """Keeps `Any` imported for the Protocol annotations under strict tooling."""

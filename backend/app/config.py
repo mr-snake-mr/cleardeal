@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     session_secret: str = "dev-insecure-secret-change-me"
     session_ttl_hours: int = 12
 
+    # Gemini. Absent key = AI endpoints return 503 and the payment path is
+    # unaffected; it never blocks the demo (docs/05 §9).
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.8-flash"
+    ai_timeout_seconds: float = 10.0
+
     # Model B only. Absent key = credential storage refuses to run rather than
     # writing plaintext (app/crypto.py). Deliberately not defaulted to a value:
     # a default encryption key is a published encryption key.
