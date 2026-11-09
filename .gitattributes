@@ -1,0 +1,15 @@
+* text=auto eol=lf
+
+# Binaries must never be normalised.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.sqlite binary
+*.db binary
+*.bundle binary
+
+# Windows scripts keep CRLF; everything else is LF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
