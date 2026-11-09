@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import base64
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Protocol
 
@@ -58,7 +58,17 @@ class PayPalRejected(PayPalError):
 
 
 class PayPalUnavailable(PayPalError):
-    """Transport failure or 5xx after the single attempt."""
+    """Transport failure or 5xx after the single attempt.
+
+    `attempted` is the difference between "nothing was sent, retry freely" and
+    "the capture may have moved money, reconcile instead" (docs/04 §5). The
+    caller cannot recover that from a message, so the class carries it.
+    """
+
+    def __init__(self, message: str, *, attempted: bool = True) -> None:
+        # Defaults to True: assuming money may have moved is the safe error.
+        self.attempted = attempted
+        super().__init__(message)
 
 
 class PayPalVerificationError(PayPalError):
@@ -68,7 +78,9 @@ class PayPalVerificationError(PayPalError):
 @dataclass(frozen=True, slots=True)
 class PayPalCredentials:
     client_id: str
-    client_secret: str
+    # `repr=False`: a credential that prints is a credential in a log line, a
+    # Sentry frame-locals dump, or a `pytest --showlocals` transcript.
+    client_secret: str = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +144,8 @@ class PayPalClient:
                 "Content-Type": "application/x-www-form-urlencoded",
             },
             "grant_type=client_credentials",
+            # `attempted=False`: if the token call fails, nothing was captured.
+            attempted=False,
         )
         token = body.get("access_token")
         if not token:
@@ -178,6 +192,7 @@ class PayPalClient:
                     "user_action": "PAY_NOW",
                 },
             },
+            attempted=True,
         )
 
         order_id = body.get("id")
@@ -199,6 +214,20 @@ class PayPalClient:
 
     # ---------------------------------------------------------------- capture
 
+    def show_order(self, order_id: str) -> dict:
+        """`GET /v2/checkout/orders/{id}`.
+
+        Exists because docs/04 §5 mandates "fetch order status first; never
+        blind-retry" after a timeout, and that instruction needs a method.
+        """
+        return self._request(
+            "GET",
+            f"{self._base}{_ORDERS_PATH}/{order_id}",
+            self._auth_headers(),
+            None,
+            attempted=True,
+        )
+
     def capture(
         self, *, order_id: str, expected_amount: Decimal, expected_currency: str
     ) -> CaptureResult:
@@ -208,6 +237,7 @@ class PayPalClient:
             f"{self._base}{_ORDERS_PATH}/{order_id}/capture",
             self._auth_headers(),
             {},
+            attempted=True,
         )
 
         if body.get("status") != "COMPLETED":
@@ -215,7 +245,7 @@ class PayPalClient:
         if body.get("id") != order_id:
             raise PayPalVerificationError("capture response was for a different order")
 
-        capture = self._first_capture(body)
+        capture = self._single_capture(body)
         if capture.get("status") != "COMPLETED":
             raise PayPalVerificationError(f"capture object status was {capture.get('status')!r}")
 
@@ -249,25 +279,49 @@ class PayPalClient:
             "Content-Type": "application/json",
         }
 
-    def _request(self, method: str, url: str, headers: dict, body: Any) -> dict:
+    def _request(
+        self, method: str, url: str, headers: dict, body: Any, *, attempted: bool = False
+    ) -> dict:
         try:
             return self._transport(method, url, headers, body)
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
+            if code == 401:
+                # A revoked or rotated token must not be cached for hours while
+                # every call 401s. Drop it; the next call refetches.
+                self._token = None
+                self._token_refresh_at = 0.0
             # `from None`: the chained exception carries the request, and the
             # request carries the Basic header.
             if 500 <= code < 600:
-                raise PayPalUnavailable(f"PayPal returned {code}") from None
+                raise PayPalUnavailable(
+                    f"PayPal returned {code}", attempted=attempted
+                ) from None
             raise PayPalRejected(f"PayPal rejected the request ({code})") from None
         except (httpx.RequestError, TimeoutError) as exc:
-            raise PayPalUnavailable(f"PayPal was unreachable ({type(exc).__name__})") from None
+            raise PayPalUnavailable(
+                f"PayPal was unreachable ({type(exc).__name__})", attempted=attempted
+            ) from None
 
     @staticmethod
-    def _first_capture(body: dict) -> dict:
+    def _single_capture(body: dict) -> dict:
+        """Exactly one capture object, or a refusal.
+
+        A second capture object means money moved twice. Taking `[0]` and moving
+        on would record one id and silently lose the other — and the second id
+        never reaches the UNIQUE column that would have caught it.
+        """
         try:
-            return body["purchase_units"][0]["payments"]["captures"][0]
+            captures = body["purchase_units"][0]["payments"]["captures"]
         except (KeyError, IndexError, TypeError) as exc:
-            raise PayPalVerificationError("capture response carried no capture object") from exc
+            raise PayPalVerificationError(
+                "capture response carried no capture object"
+            ) from exc
+        if not isinstance(captures, list) or len(captures) != 1:
+            raise PayPalVerificationError(
+                "capture response carried more than one capture"
+            )
+        return captures[0]
 
 
 def _extract_payee(capture: dict) -> str | None:

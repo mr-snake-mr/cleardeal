@@ -365,3 +365,117 @@ def test_a_four_hundred_is_a_rejection_not_an_outage():
             expected_amount=Decimal("120.00"),
             expected_currency="USD",
         )
+
+# ------------------------------------------------- audit round on the client
+
+
+def test_a_pending_capture_object_is_never_paid_even_when_the_order_says_completed():
+    """eCheck captures come back PENDING under an order that reads COMPLETED.
+    The capture-object status is the line that keeps that out of the ledger, and
+    the earlier version of this test mutated the wrong field."""
+    body = json.loads(json.dumps(CAPTURE_OK))
+    body["purchase_units"][0]["payments"]["captures"][0]["status"] = "PENDING"
+    client, _ = _client(TOKEN_OK, body)
+
+    with pytest.raises(PayPalVerificationError):
+        client.capture(
+            order_id="5O190127TN364715T",
+            expected_amount=Decimal("120.00"),
+            expected_currency="USD",
+        )
+
+
+def test_two_capture_objects_on_one_order_are_refused():
+    """Money moved twice and one row recorded is the worst outcome available.
+    The second capture id would never reach the UNIQUE column."""
+    body = json.loads(json.dumps(CAPTURE_OK))
+    captures = body["purchase_units"][0]["payments"]["captures"]
+    captures.append({**captures[0], "id": "SECONDCAPTURE0001"})
+    client, _ = _client(TOKEN_OK, body)
+
+    with pytest.raises(PayPalVerificationError):
+        client.capture(
+            order_id="5O190127TN364715T",
+            expected_amount=Decimal("120.00"),
+            expected_currency="USD",
+        )
+
+
+def test_repr_and_traceback_do_not_carry_the_secret():
+    """`from None` hides the context from the printer, not from the object. A
+    repr or a frame-locals dump must not carry the credential either."""
+    import traceback
+
+    client, _ = _client(_status(401))
+
+    with pytest.raises(PayPalRejected) as caught:
+        client.create_order(
+            amount=Decimal("1.00"),
+            currency="USD",
+            reference_id="m",
+            custom_id="c",
+            return_url="https://app.test/r",
+            cancel_url="https://app.test/c",
+        )
+
+    printed = "".join(traceback.format_exception(caught.value))
+    assert "secret-xyz" not in printed
+    assert "secret-xyz" not in repr(client)
+    assert "secret-xyz" not in repr(CREDS)
+
+
+def test_a_rejected_bearer_token_is_discarded_so_the_next_call_refetches():
+    """A revoked token would otherwise be fingerprinted as valid for hours and
+    every call would 401 until the process restarted."""
+    client, transport = _client(TOKEN_OK, _status(401), TOKEN_OK, CAPTURE_OK)
+
+    with pytest.raises(PayPalRejected):
+        client.capture(
+            order_id="5O190127TN364715T",
+            expected_amount=Decimal("120.00"),
+            expected_currency="USD",
+        )
+    client.capture(
+        order_id="5O190127TN364715T", expected_amount=Decimal("120.00"), expected_currency="USD"
+    )
+
+    token_calls = [c for c in transport.calls if c["url"].endswith("/v1/oauth2/token")]
+    assert len(token_calls) == 2
+
+
+def test_an_unavailable_capture_is_marked_as_unknown_outcome():
+    """docs/04 §5: a token failure means nothing was attempted (safe to retry);
+    a capture timeout means the outcome is unknown (never retry). The caller
+    cannot tell those apart from a message string."""
+    client, _ = _client(TOKEN_OK, httpx.ConnectError("no route"))
+
+    with pytest.raises(PayPalUnavailable) as caught:
+        client.capture(
+            order_id="5O190127TN364715T",
+            expected_amount=Decimal("120.00"),
+            expected_currency="USD",
+        )
+    assert caught.value.attempted is True
+
+    client2, _ = _client(httpx.ConnectError("no route"))
+    with pytest.raises(PayPalUnavailable) as caught2:
+        client2.capture(
+            order_id="5O190127TN364715T",
+            expected_amount=Decimal("120.00"),
+            expected_currency="USD",
+        )
+    assert caught2.value.attempted is False
+
+
+def test_show_order_is_how_an_unknown_capture_is_resolved():
+    """`docs/04 §5` mandates "fetch order status first". Without this method
+    that instruction has no code path."""
+    client, transport = _client(TOKEN_OK, CAPTURE_OK)
+
+    body = client.show_order("5O190127TN364715T")
+
+    assert body["status"] == "COMPLETED"
+    assert transport.calls[-1]["method"] == "GET"
+    assert transport.calls[-1]["url"] == (
+        "https://api-m.sandbox.paypal.com/v2/checkout/orders/5O190127TN364715T"
+    )
