@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ClearDeal — scope, checked</title>
+<style>
+  :root {
+    --ink: #12161d; --muted: #5b6472; --line: #d9dee6; --bg: #f6f7f9;
+    --card: #ffffff; --accent: #1f5f4f; --warn: #8a4b00; --bad: #8c1d18;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header { padding: 28px 24px 8px; max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  main { max-width: 880px; margin: 0 auto; padding: 0 24px 64px; }
+  section {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 0 0 16px;
+  }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .06em;
+       color: var(--muted); margin: 0 0 14px; font-weight: 600; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input, textarea, select {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px;
+    font: inherit; background: #fff; color: var(--ink);
+  }
+  textarea { min-height: 84px; resize: vertical; }
+  button {
+    font: inherit; padding: 9px 14px; border-radius: 6px; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; cursor: pointer; margin-top: 12px;
+  }
+  button.quiet { background: #fff; color: var(--accent); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1 1 200px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); }
+  .pill.ok { color: var(--accent); border-color: #b6d3c8; background: #eef7f2; }
+  .pill.warn { color: var(--warn); border-color: #e6cbab; background: #fdf4e8; }
+  .pill.bad { color: var(--bad); border-color: #e7b6b2; background: #fdeeed; }
+  .quote { color: var(--muted); border-left: 3px solid var(--line); padding-left: 10px; margin: 6px 0 0; }
+  .note { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+  .status { margin-top: 10px; font-size: 14px; min-height: 1.2em; }
+  .status.bad { color: var(--bad); }
+  .status.ok { color: var(--accent); }
+  .hidden { display: none; }
+  .sum { font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ClearDeal</h1>
+  <p class="sub">An approved scope, checked against — with evidence that resolves or a verdict that says it cannot.</p>
+</header>
+<main>
+
+<section id="auth-section">
+  <h2>1 · Sign in</h2>
+  <div class="row">
+    <div><label for="email">Email</label><input id="email" type="email" autocomplete="username" value="demo@cleardeal.test" /></div>
+    <div><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" value="correct horse battery staple" /></div>
+  </div>
+  <button id="login">Sign in or create account</button>
+  <p class="status" id="auth-status" role="status"></p>
+</section>
+
+<section id="project-section">
+  <h2>2 · Project and brief</h2>
+  <div class="row">
+    <div><label for="project-name">Project</label><input id="project-name" value="Marketing site" /></div>
+    <div><label for="client-email">Client email</label><input id="client-email" type="email" value="client@example.test" /></div>
+    <div><label for="budget">Budget (USD)</label><input id="budget" value="300.00" /></div>
+  </div>
+  <label for="brief">Brief</label>
+  <textarea id="brief">Five page marketing site with a blog index and a contact form. Budget is 300 dollars. Copywriting and photography are not included.</textarea>
+  <button id="create-project">Create project</button>
+  <p class="status" id="project-status" role="status"></p>
+</section>
+
+<section id="analyse-section">
+  <h2>3 · Read the brief</h2>
+  <button id="analyse">Analyse brief</button>
+  <div id="analysis-out"></div>
+  <p class="status" id="analyse-status" role="status"></p>
+</section>
+
+<section id="agreement-section">
+  <h2>4 · Agreement</h2>
+  <button id="draft">Draft agreement from accepted requirements</button>
+  <div id="agreement-out"></div>
+  <div id="agreement-actions" class="hidden">
+    <button class="quiet" id="send">Send to both parties</button>
+    <button class="quiet" id="approve-freelancer">Approve as freelancer</button>
+    <button class="quiet" id="approve-client">Approve as client</button>
+  </div>
+  <p class="status" id="agreement-status" role="status"></p>
+</section>
+
+<section id="pay-section">
+  <h2>5 · Payment</h2>
+  <div class="row">
+    <div><label for="pp-id">PayPal client id</label><input id="pp-id" placeholder="sandbox client id" /></div>
+    <div><label for="pp-secret">PayPal client secret</label><input id="pp-secret" type="password" placeholder="never logged, never returned" /></div>
+  </div>
+  <button class="quiet" id="connect">Connect merchant</button>
+  <div id="pay-out"></div>
+  <p class="status" id="pay-status" role="status"></p>
+</section>
+
+<section id="change-section">
+  <h2>6 · Ask for a change</h2>
+  <label for="change-text">What the client asked for</label>
+  <textarea id="change-text">Can you also add Google login?</textarea>
+  <button id="check">Check against the approved scope</button>
+  <div id="change-out"></div>
+  <p class="status" id="change-status" role="status"></p>
+</section>
+
+</main>
+<script>
+const state = { project: null, version: null, analysis: null };
+
+const $ = (id) => document.getElementById(id);
+
+function say(id, message, kind) {
+  const el = $(id);
+  el.textContent = message || "";
+  el.className = "status" + (kind ? " " + kind : "");
+}
+
+async function api(path, options) {
+  const response = await fetch("/api/v1" + path, {
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const detail = body.details ? " " + JSON.stringify(body.details) : "";
+    throw new Error((body.message || "Request failed") + detail);
+  }
+  return body;
+}
+
+function money(value) { return "$" + value; }
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+$("login").addEventListener("click", async () => {
+  say("auth-status", "Working…");
+  const credentials = { email: $("email").value, password: $("password").value };
+  try {
+    await api("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ ...credentials, name: "Demo" }),
+    });
+  } catch (error) {
+    // Already registered is the normal path on a second run.
+    if (!/exists|duplicate/i.test(error.message)) { say("auth-status", error.message, "bad"); return; }
+  }
+  try {
+    await api("/auth/login", { method: "POST", body: JSON.stringify(credentials) });
+    say("auth-status", "Signed in.", "ok");
+  } catch (error) { say("auth-status", error.message, "bad"); }
+});
+
+$("create-project").addEventListener("click", async () => {
+  say("project-status", "Working…");
+  try {
+    state.project = await api("/projects", {
+      method: "POST",
+      body: JSON.stringify({
+        name: $("project-name").value,
+        client_email: $("client-email").value,
+        brief: $("brief").value,
+        budget_amount: $("budget").value,
+      }),
+    });
+    say("project-status", "Project " + state.project.id.slice(0, 8) + " created.", "ok");
+  } catch (error) { say("project-status", error.message, "bad"); }
+});
+
+$("analyse").addEventListener("click", async () => {
+  if (!state.project) { say("analyse-status", "Create the project first.", "bad"); return; }
+  say("analyse-status", "Reading…");
+  try {
+    state.analysis = await api("/projects/" + state.project.id + "/analyse", { method: "POST" });
+    const rows = state.analysis.requirements.map((r) => `
+      <tr><td>${escapeHtml(r.text)}</td>
+      <td>${r.source === "explicit" ? '<span class="pill ok">explicit</span>' : '<span class="pill warn">inferred</span>'}</td>
+      <td class="quote">${r.quote ? escapeHtml(r.quote) : "—"}</td></tr>`).join("");
+    $("analysis-out").innerHTML = `
+      <table><thead><tr><th>Requirement</th><th>Source</th><th>Quote from the brief</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <p class="note">An <code>explicit</code> requirement without a quote is rejected before it reaches this table.</p>`;
+    say("analyse-status", state.analysis.requirements.length + " requirements read.", "ok");
+  } catch (error) { say("analyse-status", error.message, "bad"); }
+});
+
+$("draft").addEventListener("click", async () => {
+  if (!state.project) { say("agreement-status", "Create the project first.", "bad"); return; }
+  const accepted = (state.analysis ? state.analysis.requirements : [{ text: "A five page site" }])
+    .map((r) => r.text);
+  say("agreement-status", "Drafting…");
+  try {
+    state.version = await api("/projects/" + state.project.id + "/agreement", {
+      method: "POST",
+      body: JSON.stringify({ accepted_requirements: accepted }),
+    });
+    renderVersion();
+    $("agreement-actions").classList.remove("hidden");
+    say("agreement-status", "Version " + state.version.version_no + " drafted.", "ok");
+  } catch (error) { say("agreement-status", error.message, "bad"); }
+});
+
+function renderVersion() {
+  const version = state.version;
+  const total = version.milestones.reduce((sum, m) => sum + Number(m.amount), 0);
+  const rows = version.milestones.map((m) => `
+    <tr><td>${m.ordinal}</td><td>${escapeHtml(m.title)}</td>
+    <td class="sum">${money(m.amount)}</td><td>${escapeHtml(m.acceptance.join("; "))}</td></tr>`).join("");
+  $("agreement-out").innerHTML = `
+    <p class="note">Status <span class="pill">${version.status}</span> ·
+      hash <code>${version.content_hash.slice(0, 16)}…</code> ·
+      content intact: <strong>${version.content_intact}</strong></p>
+    <div>${version.sections.map((s) => `<p><strong>${escapeHtml(s.title)}</strong><br>${escapeHtml(s.body)}</p>`).join("")}</div>
+    <table><thead><tr><th>#</th><th>Milestone</th><th>Amount</th><th>Accepted when</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <p class="note sum">Milestones total ${money(total.toFixed(2))} against a budget of ${money(version.budget_amount)} — equal to the cent, or the draft is refused.</p>`;
+}
+
+async function act(path, label) {
+  if (!state.version) { say("agreement-status", "Draft an agreement first.", "bad"); return; }
+  say("agreement-status", label + "…");
+  try {
+    state.version = await api("/agreements/" + state.version.id + path, {
+      method: "POST",
+      body: "{}",
+    });
+    renderVersion();
+    say("agreement-status", "Now " + state.version.status + ".", "ok");
+  } catch (error) { say("agreement-status", error.message, "bad"); }
+}
+
+$("send").addEventListener("click", () => act("/send", "Sending"));
+$("approve-freelancer").addEventListener("click", async () => {
+  if (!state.version) return;
+  try {
+    state.version = await api("/agreements/" + state.version.id + "/approve", {
+      method: "POST", body: JSON.stringify({ role: "freelancer" }),
+    });
+    renderVersion();
+    say("agreement-status", "Freelancer approval recorded. The client role is self-asserted in this build — see A-11.", "ok");
+  } catch (error) { say("agreement-status", error.message, "bad"); }
+});
+$("approve-client").addEventListener("click", async () => {
+  if (!state.version) return;
+  try {
+    state.version = await api("/agreements/" + state.version.id + "/approve", {
+      method: "POST", body: JSON.stringify({ role: "client" }),
+    });
+    renderVersion();
+    say("agreement-status", "Approved. Payments read this state and nothing else.", "ok");
+  } catch (error) { say("agreement-status", error.message, "bad"); }
+});
+
+$("connect").addEventListener("click", async () => {
+  say("pay-status", "Connecting…");
+  try {
+    await api("/merchants/paypal", {
+      method: "PUT",
+      body: JSON.stringify({ client_id: $("pp-id").value, client_secret: $("pp-secret").value }),
+    });
+    say("pay-status", "Merchant connected. The secret is stored encrypted and never returned.", "ok");
+    renderPay();
+  } catch (error) { say("pay-status", error.message, "bad"); }
+});
+
+function renderPay() {
+  if (!state.version) { $("pay-out").innerHTML = ""; return; }
+  const rows = state.version.milestones.map((m) => `
+    <tr><td>${escapeHtml(m.title)}</td><td class="sum">${money(m.amount)}</td>
+    <td>${m.status}</td>
+    <td><button class="quiet" data-milestone="${m.id}">Create order</button></td></tr>`).join("");
+  $("pay-out").innerHTML = `
+    <table><thead><tr><th>Milestone</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <p class="note">The amount sent to PayPal is read from the milestone row. It is not in the request.</p>`;
+  $("pay-out").querySelectorAll("button[data-milestone]").forEach((button) => {
+    button.addEventListener("click", () => createOrder(button.dataset.milestone));
+  });
+}
+
+async function createOrder(milestoneId) {
+  say("pay-status", "Creating order…");
+  try {
+    const payment = await api("/milestones/" + milestoneId + "/payment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+      body: "{}",
+    });
+    $("pay-out").insertAdjacentHTML("beforeend", `
+      <p class="note">Order <code>${payment.paypal_order_id}</code> ·
+        <a href="${payment.approve_url}" rel="noreferrer noopener" target="_blank">Approve in PayPal</a></p>`);
+    say("pay-status", "Order created. Capture happens server-side only after PayPal proves it.", "ok");
+  } catch (error) { say("pay-status", error.message, "bad"); }
+}
+
+$("check").addEventListener("click", async () => {
+  if (!state.project) { say("change-status", "Create the project first.", "bad"); return; }
+  say("change-status", "Checking…");
+  try {
+    const result = await api("/projects/" + state.project.id + "/changes", {
+      method: "POST",
+      body: JSON.stringify({ raw_text: $("change-text").value }),
+    });
+    const cards = result.items.map((item) => {
+      const kind = item.classification === "NEEDS_CLARIFICATION" ? "warn"
+        : item.classification === "OUT_OF_SCOPE" ? "bad" : "ok";
+      const evidence = item.evidence.length
+        ? item.evidence.map((e) => `<p class="quote">“${escapeHtml(e.quote)}” — <code>${e.section_key}</code></p>`).join("")
+        : `<p class="quote">No citation survived. ${item.downgrade_reason ? escapeHtml(item.downgrade_reason) : ""}</p>`;
+      return `<tr><td>${escapeHtml(item.feature)}</td>
+        <td><span class="pill ${kind}">${item.classification}</span></td>
+        <td>${item.confidence}</td>
+        <td>${escapeHtml(item.explanation)}${evidence}</td></tr>`;
+    }).join("");
+    $("change-out").innerHTML = `
+      <table><thead><tr><th>Feature</th><th>Verdict</th><th>Confidence</th><th>Why, with the quote</th></tr></thead>
+      <tbody>${cards}</tbody></table>`;
+    say("change-status", "Checked against version " + (state.version ? state.version.version_no : "current") + ".", "ok");
+  } catch (error) { say("change-status", error.message, "bad"); }
+});
+</script>
+</body>
+</html>

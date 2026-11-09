@@ -5,10 +5,12 @@ changes go through Alembic only (docs/07 Â§6). create_all hides drift and cann
 express the constraints the schema depends on.
 """
 
+import pathlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import SessionLocal, engine
@@ -97,6 +99,14 @@ def create_app() -> FastAPI:
 
     # Infra probe, deliberately outside /api/v1 so it never becomes part of the
     # public contract.
+    # The demo page. Served from the app on purpose: no build step, no second
+    # process, and no CORS to get wrong on the morning of a demo.
+    page = pathlib.Path(__file__).parent / "static" / "index.html"
+
+    @app.get("/", include_in_schema=False)
+    def index() -> FileResponse:
+        return FileResponse(page)
+
     app.include_router(health.router, tags=["infra"])
     app.include_router(webhooks.router)
 
