@@ -48,9 +48,11 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization", "Idempotency-Key"],
     )
 
-    # A published signing key is an authentication bypass. Refusing to boot is
-    # the only safe response — a warning in a log is a warning nobody reads.
-    if settings.paypal_env == "live" and settings.session_secret.startswith("dev-insecure"):
+    # A published signing key is an authentication bypass, and it is one in the
+    # sandbox demo too — the token is forgeable regardless of which PayPal host
+    # the app talks to. So the guard is on `debug`, not on `paypal_env`: any
+    # deployment that is not explicitly a debug server must carry a real secret.
+    if not settings.debug and settings.session_secret.startswith("dev-insecure"):
         raise ValueError(
             "SESSION_SECRET must be set to a real secret in live mode; the "
             "development default is public."

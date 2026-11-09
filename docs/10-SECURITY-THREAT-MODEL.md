@@ -134,3 +134,4 @@ S-6 returns `404` rather than `403` deliberately: `403` confirms the object exis
 2. Stored seller secrets are the largest single liability; the mitigation is encryption at rest plus the narrowest possible scopes (R-4).
 3. No independent security review, no pen test, no SOC 2, no PCI attestation. This is a hackathon submission, and it says so.
 4. The magic-link email path is a stub, so invitation security is proven by test rather than by a real delivered email (A-9).
+5. Logout does not revoke a token: sessions are stateless, so a captured cookie stays valid to expiry. Closing this needs a revocation store (schema change), and the limitation is documented in 08 §2 rather than hidden behind a comment.

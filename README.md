@@ -19,8 +19,9 @@ That rejection rule is the whole product. An AI that reads contracts is not nove
 | Dossier `docs/00`–`docs/17` | complete, audited across two rounds (19 findings → 7 → PASS) |
 | Database schema, 14 tables, 8 named + 3 implicit indexes | done, migration reversible |
 | Money handling (exact cents, no float) | done, tested across both dialects' type bindings |
-| Test suite | **50 tests, 99.05% coverage, `ruff` clean** |
-| Auth, projects, AI modules, PayPal, frontend, E2E | **not started** |
+| Test suite | **75 tests, 98.09% coverage, `ruff` clean** |
+| Auth (register, login, logout, session cookie) | done, 25 tests |
+| Projects, AI modules, PayPal, frontend, E2E | **not started** |
 
 So: the foundation is real and tested. The demo is not built yet. Anything below in the present tense describes the design that the foundation exists to support, and `docs/13-SCHEDULE.md` says when each part lands.
 

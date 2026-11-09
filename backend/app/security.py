@@ -18,6 +18,7 @@ Two decisions worth stating:
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -88,18 +89,20 @@ def read_session(token: str | None) -> uuid.UUID | None:
     """Return the user id, or None for any malformed, tampered or expired token."""
     if not token:
         return None
-    parts = token.split(".")
-    if len(parts) != 3 or parts[0] != _TOKEN_VERSION:
-        return None
-    _, payload, signature = parts
-    # Signature first: parsing an unverified payload is how token bugs become
-    # injection bugs.
-    if not hmac.compare_digest(signature, _sign(payload)):
-        return None
     try:
+        parts = token.split(".")
+        if len(parts) != 3 or parts[0] != _TOKEN_VERSION:
+            return None
+        _, payload, signature = parts
+        # Signature first: parsing an unverified payload is how token bugs
+        # become injection bugs. `_sign` encodes as ASCII and `compare_digest`
+        # rejects non-ASCII `str`, so a cookie of any bytes can raise here —
+        # and a malformed cookie must be a signed-out request, never a 500.
+        if not hmac.compare_digest(signature, _sign(payload)):
+            return None
         data = json.loads(_unb64(payload))
         if int(data["exp"]) < int(time.time()):
             return None
         return uuid.UUID(data["sub"])
-    except (ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError, UnicodeError, binascii.Error):
         return None

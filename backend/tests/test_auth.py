@@ -12,6 +12,7 @@ from sqlalchemy import delete, select
 from app.database import SessionLocal
 from app.main import create_app
 from app.models import User
+from app.routers.auth import COOKIE_NAME
 from app.security import hash_password, issue_session, read_session, verify_password
 
 GOOD_PASSWORD = "correct horse battery staple"
@@ -98,7 +99,7 @@ def test_an_expired_token_is_rejected():
 
 
 def test_garbage_tokens_are_rejected_not_raised():
-    for token in ["", "x", "v1..", "v2.a.b", "v1.!!!.???", None]:
+    for token in ["", "x", "v1..", "v2.a.b", "v1.!!!.???", "v1.\u00e9\u00e9.\u00e9\u00e9", None]:
         assert read_session(token) is None
 
 
@@ -175,14 +176,37 @@ def test_wrong_password_and_unknown_email_are_indistinguishable(client):
     assert wrong.json() == unknown.json()
 
 
-def test_logout_clears_the_session(client):
+def test_logout_tells_the_browser_to_drop_the_cookie(client):
+    """Asserts the Set-Cookie the server sends, not the client forgetting.
+
+    An earlier version of this test cleared the cookie jar by hand and would
+    have passed with `logout` deleted entirely.
+    """
     _register(client)
     assert client.get("/api/v1/auth/me").status_code == 200
+
+    response = client.post("/api/v1/auth/logout")
+
+    assert response.status_code == 204
+    set_cookie = response.headers.get("set-cookie", "")
+    assert COOKIE_NAME in set_cookie
+    assert "Max-Age=0" in set_cookie or 'cleardeal_session=""' in set_cookie
+
+
+def test_sessions_are_stateless_so_a_captured_token_survives_logout(client):
+    """Documents the limitation instead of hiding it.
+
+    Logout clears the cookie; it does not revoke the token, because there is no
+    server-side session store. A cookie captured before logout stays valid until
+    it expires. Adding revocation is a schema change (a `jti` table) and is
+    recorded as a known gap, not papered over with a comment claiming a
+    server-side clear.
+    """
+    _register(client)
+    stolen = client.cookies.get(COOKIE_NAME)
     client.post("/api/v1/auth/logout")
-    # TestClient keeps the cookie jar; an explicit empty cookie proves the
-    # server-side clear rather than the client forgetting.
-    client.cookies.clear()
-    assert client.get("/api/v1/auth/me").status_code == 401
+
+    assert read_session(stolen) is not None
 
 
 def test_me_without_a_cookie_is_401(client):
@@ -202,19 +226,37 @@ def test_a_valid_token_for_a_deleted_user_is_401(client, db):
 # ------------------------------------------------------------------ boot
 
 
-def test_live_mode_refuses_the_development_secret(monkeypatch):
-    """A published signing key is an authentication bypass, so boot must fail."""
+def test_a_non_debug_boot_refuses_the_development_secret(monkeypatch):
+    """A published signing key is an authentication bypass — in sandbox too.
+
+    The guard is on `debug`, not on `paypal_env`: the token is forgeable
+    whatever PayPal host the app talks to.
+    """
     from app.config import settings
 
-    monkeypatch.setattr(settings, "paypal_env", "live")
+    monkeypatch.setattr(settings, "debug", False)
+    monkeypatch.setattr(settings, "paypal_env", "sandbox")
     monkeypatch.setattr(settings, "session_secret", "dev-insecure-secret-change-me")
     with pytest.raises(ValueError, match="SESSION_SECRET"):
         create_app()
 
 
-def test_live_mode_accepts_a_real_secret(monkeypatch):
+def test_a_real_secret_boots_and_a_different_default_still_fails(monkeypatch):
+    """Both directions: a real secret is accepted, a dev-shaped one is not."""
     from app.config import settings
 
-    monkeypatch.setattr(settings, "paypal_env", "live")
+    monkeypatch.setattr(settings, "debug", False)
     monkeypatch.setattr(settings, "session_secret", "a-real-32-byte-secret-value-here")
+    assert create_app() is not None
+
+    monkeypatch.setattr(settings, "session_secret", "dev-insecure-something-else")
+    with pytest.raises(ValueError, match="SESSION_SECRET"):
+        create_app()
+
+
+def test_debug_servers_may_use_the_development_secret(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "debug", True)
+    monkeypatch.setattr(settings, "session_secret", "dev-insecure-secret-change-me")
     assert create_app() is not None

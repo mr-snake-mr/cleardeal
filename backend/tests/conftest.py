@@ -13,6 +13,10 @@ from fastapi.testclient import TestClient
 _tmpdir = tempfile.mkdtemp(prefix="cleardeal-test-")
 _db_path = os.path.join(_tmpdir, "test.db")
 os.environ["DATABASE_URL"] = f"sqlite:///{_db_path}"
+# Not the development default: `create_app` refuses to boot with that secret
+# unless `debug` is on, and the test suite should exercise the production guard
+# rather than the exemption from it.
+os.environ["SESSION_SECRET"] = "test-secret-2f8c1d4e6a9b0c3f5e7d1a2b4c6d8e0f"
 
 from app.main import create_app  # noqa: E402
 

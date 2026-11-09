@@ -53,6 +53,8 @@ Two rules that hold for every endpoint below:
 
 Session cookie: `HttpOnly`, `Secure` in non-debug, `SameSite=Lax`. No JWT in `localStorage` — a token readable by JavaScript is a token stealable by any XSS.
 
+**Limitation, stated rather than implied:** sessions are stateless signed tokens, so `POST /auth/logout` clears the cookie but does **not** revoke the token. A cookie captured before logout remains valid until `exp` (12 h by default). Revocation needs a `jti` revocation table, which is a schema change and is not in this build.
+
 ### Client access — magic link, no password
 
 | Method | Path | Body | Returns |
