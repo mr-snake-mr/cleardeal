@@ -44,9 +44,11 @@ written.*
 
 **Send**, then **Approve as freelancer**, then **Approve as client**.
 
-Say, before anyone asks: *in this build the client role is the owner asserting a
-role — there is no client session yet, the page says so, and doc 16 A-11 records
-it. The mechanism is per-role and per-version; the second principal is the gap.*
+Press **Invite the client** and open the link in a private window, then approve as
+the client from there. Say: *two signatures need two principals — the owner signs
+as freelancer, and the client role only opens for the account named on this
+project's invitation (doc 16 A-15). A client who already has an account signs in
+with it instead; the link cannot stand in for a password.*
 
 ## 1:45 — money
 
@@ -74,7 +76,7 @@ One breath, no hedging:
 
 > "No payouts, no escrow, no platform fee, no multiparty — that needs PayPal
 > partner approval, which is in doc 04. Client approval needs a magic-link
-> session, which is doc 16 A-11. And nothing here has been captured against a
+> session, which is doc 16 A-15. And nothing here has been captured against a
 > live sandbox order yet; the client is proven against a fake transport, not
 > against PayPal."
 

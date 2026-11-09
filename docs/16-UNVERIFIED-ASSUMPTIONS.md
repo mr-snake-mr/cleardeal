@@ -137,7 +137,7 @@ Rule for the build: an assumption that turns out false must change the documents
 | **If false** | The timeline shows two approvals from one account. A judge who notices concludes the dual-approval claim is theatre — which would be correct |
 | **How to close** | Magic-link exchange (block 1.5, unbuilt) plus a distinct actor id per approval, and `approve` refusing a second role from the same actor |
 | **Severity** | High for the claim, low for the demo path — the payment path only needs the version to reach `APPROVED` |
-| **Recorded in code** | `tests/test_agreements.py::test_dual_approval_is_one_actor_asserting_two_roles_today` proves the gap rather than hiding it |
+| **Recorded in code** | `tests/test_invitations.py::test_two_distinct_principals_sign_and_the_agreement_is_approved` proves the closure, and `test_the_owner_cannot_sign_as_the_client` proves the hole is gone rather than documented |
 
 ### A-10 — Judging criteria weights
 

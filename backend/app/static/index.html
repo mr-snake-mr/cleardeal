@@ -264,7 +264,7 @@ $("approve-freelancer").addEventListener("click", async () => {
       method: "POST", body: JSON.stringify({ role: "freelancer" }),
     });
     renderVersion();
-    say("agreement-status", "Freelancer approval recorded. The client role is self-asserted in this build — see A-11.", "ok");
+    say("agreement-status", "Freelancer approval recorded. The client signs from their own session — see A-15.", "ok");
   } catch (error) { say("agreement-status", error.message, "bad"); }
 });
 $("approve-client").addEventListener("click", async () => {
