@@ -328,7 +328,7 @@ Proof of the current schema: `upgrade head` → `downgrade base` → `upgrade he
 
 ## 11. Server defaults
 
-Six columns carry a SQL `DEFAULT`, not only a Python-side `default=`: `agreement_versions.status`, `agreement_sections.ordinal`, `milestones.status`, `change_requests.status`, `audit_events.payload`, `ai_runs.validation_status`.
+Six columns **were** missing a SQL `DEFAULT` and now carry one, alongside their Python-side `default=`: `agreement_versions.status`, `agreement_sections.ordinal`, `milestones.status`, `change_requests.status`, `audit_events.payload`, `ai_runs.validation_status`.
 
 The distinction matters because a Python default applies only to ORM inserts. A migration script, a `psql` statement, or a future background job would otherwise be free to create a row with a `NULL` status — and the `CHECK (status IN (...))` constraints would not stop it, because `NULL` satisfies none of them but also violates nothing. The DDL default is the one that holds.
 

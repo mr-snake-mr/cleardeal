@@ -50,7 +50,7 @@ SQL injection is structurally absent: every query is SQLAlchemy Core/ORM with bo
 | **I**nformation disclosure | `client_secret` never appears in a log, an error body, a response, or a traceback. Logging filter redacts keys matching `secret\|token\|authorization`. |
 | **I**nformation disclosure | `merchant_accounts` stores AES-GCM ciphertext (`encrypted_client_id`, `encrypted_client_secret`) with a 96-bit random nonce per record, key from `CREDENTIALS_ENCRYPTION_KEY`. A database dump alone does not yield credentials. |
 | **S**poofing | Token fetched per request with the *resolving merchant's* credentials; no credential is ever taken from the request body at capture time |
-| **T**ampering | The capture response is asserted field by field (status, amount, currency, order id, payee) before any write. `COMPLETED` alone is not enough. |
+| **T**ampering | The capture response is asserted field by field (status, amount, currency, order id) before any write — plus the payee id when the response carries one (A-2). `COMPLETED` alone is not enough. |
 | **D**oS / cost | Timeouts on every outbound call (5s token, 10s capture); one retry on connection error, **never** on a capture POST — a blind retry can double-capture |
 | **E**levation | Credentials are scoped to order create / read / capture for the owning freelancer. There is no code path that calls Payouts, Refunds, or any account-management endpoint. |
 

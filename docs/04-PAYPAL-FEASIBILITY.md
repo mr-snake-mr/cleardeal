@@ -148,7 +148,7 @@ Amount is read from `milestones.amount` inside a transaction; the request carrie
 2. Client calls `POST /api/v1/payments/{payment_id}/capture`.
 3. Server asserts the payment is `CREATED`/`APPROVED` and the amount matches the database.
 4. Server calls `POST /v2/checkout/orders/{order_id}/capture`.
-5. Server asserts `status == "COMPLETED"`, amount, currency, order id, and payee merchant id.
+5. Server asserts `status == "COMPLETED"`, amount, currency and order id — plus the payee merchant id **only when the response carries one** (A-2).
 6. Only then: `CAPTURED`, audit event, store capture id and response.
 7. Any mismatch → `RECONCILIATION_REQUIRED`, surfaced in the timeline, never "paid".
 

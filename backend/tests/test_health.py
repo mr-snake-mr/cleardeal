@@ -40,6 +40,17 @@ def test_health_reports_503_when_migrations_are_pending(client, monkeypatch):
     assert r.json()["migrations"] == "pending"
 
 
+def test_health_reports_503_when_the_revision_table_is_unreadable(client, monkeypatch):
+    """A reachable database whose alembic_version cannot be read is not ready:
+    the process cannot say which schema it is running."""
+    monkeypatch.setattr(routers.health, "migration_state", lambda _db: "error")
+
+    r = client.get("/health")
+
+    assert r.status_code == 503
+    assert r.json()["migrations"] == "error"
+
+
 def test_health_reads_paypal_env_from_settings(client, monkeypatch):
     """If the environment were hardcoded to "sandbox", this test fails."""
     monkeypatch.setattr(settings, "paypal_env", "live")

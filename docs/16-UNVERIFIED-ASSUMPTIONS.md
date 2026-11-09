@@ -87,6 +87,16 @@ Rule for the build: an assumption that turns out false must change the documents
 | **How to close** | `docker compose up postgres`, point `DATABASE_URL` at it, run the suite. Half a day, not scheduled |
 | **Severity** | Low for the submission, high if it were deployed |
 
+### A-14 — Incumbents do not store the agreement as structured data
+
+| | |
+|---|---|
+| **Assumption** | HoneyBook, Bonsai, Dubsado and similar tools treat the contract as a signed document, not as versioned structured sections that can be queried |
+| **Status** | **Unverified.** No incumbent product was opened and inspected during this build; doc 02's market table is assembled from public feature pages, which do not disclose storage design |
+| **How to close** | One trial account, one contract created, one API or export inspected. Half a day. |
+| **If false** | The gap narrows from "nobody does this" to "we do the citation verification better". The honest framing in doc 02 already allows for that; doc 03's innovation claim would need tightening, not abandoning |
+| **Why it is listed** | Because "no one else does this" is the most tempting unverified claim in any pitch, and it is the easiest for a judge to falsify from a laptop |
+
 ## 3. Product assumptions
 
 ### A-8 — A client will approve through a magic link without an account

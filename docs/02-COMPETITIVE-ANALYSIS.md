@@ -13,7 +13,7 @@ I have **not** verified any competitor's feature list against their own document
 
 | Layer | Who | Sells | Why it does not close the gap |
 |---|---|---|---|
-| Contract & client ops | HoneyBook, Bonsai, Dubsado | Proposals, contracts, e-signature, invoices, client portal, payments | Whether the agreement is stored as structured, versioned data versus a signed artefact is **unverified** (A-10). That is the question this product tests. |
+| Contract & client ops | HoneyBook, Bonsai, Dubsado | Proposals, contracts, e-signature, invoices, client portal, payments | Whether the agreement is stored as structured, versioned data versus a signed artefact is **unverified** (A-14). That is the question this product tests. |
 | Marketplaces | Upwork, Fiverr, Contra, Toptal | Discovery, escrow, disputes | Work is bought inside the platform; the freelancer's own clients sit outside it |
 | Payments | PayPal, Stripe, Wise | Movement of money | A capture is a number, not a milestone |
 | AI contract tools | Various drafters | Draft or summarise an agreement | Generation is the easy half; comparison against a fixed reference is the hard half |
@@ -40,7 +40,7 @@ Three properties make it defensible rather than a sprint-sized feature:
 2. **Comparison is against a specific approved version.** Version identity *is* the product.
 3. **The comparison output is an artefact with a lifecycle** — proposal, edit, approval, new version — not a chat reply that evaporates.
 
-A tool that stored the agreement only as prose has no way to do (2) or (3). Whether an incumbent already does is unverified (A-10).
+A tool that stored the agreement only as prose has no way to do (2) or (3). Whether an incumbent already does is unverified (A-14).
 
 ## 5. Positioning
 

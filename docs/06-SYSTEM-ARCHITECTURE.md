@@ -90,7 +90,7 @@ Freelancer      Frontend         API                    PayPal        DB
    │             │                │ POST /v2/checkout/orders/{id}/capture
    │             │                │──────────────────────>│           │
    │             │                │<──────────────────────│ COMPLETED │
-   │             │                │ assert status/amount/currency/payee│
+   │             │                │ assert status/amount/currency      │
    │             │                │───────────────────────────────────>│ CAPTURED
    │             │<───────────────│ {status: CAPTURED, captured_at}    │
 ```

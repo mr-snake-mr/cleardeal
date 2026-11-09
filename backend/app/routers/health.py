@@ -34,7 +34,11 @@ def health(db: DbSession) -> JSONResponse:
     # "error" is reported as-is rather than folded into "pending": telling an
     # operator to run migrations during an outage sends them the wrong way.
     state = migration_state(db) if db_ok else "unknown"
-    ready = db_ok and state != "pending"
+
+    # "error" means the revision table exists but cannot be read. That is not
+    # ready either — a service that cannot say which schema it is running is a
+    # service whose queries may be about to fail.
+    ready = db_ok and state not in {"pending", "error"}
 
     body = {
         "status": "ok" if ready else "degraded",

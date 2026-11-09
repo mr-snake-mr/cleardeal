@@ -16,7 +16,7 @@ Dossier 00–17, skill gate established, `git init` before the first file.
 |---|---|---|
 | 1.1 | Repo skeleton, `pyproject.toml`, config, `.env.example`, `main.py`, `/health` | app boots |
 | 1.2 | `Money` TypeDecorator, `database.py`, FK pragma, `migration_state()` | `test_money.py`, `test_infrastructure.py` green |
-| 1.3 | 14 models, deletion policy, 8 indexes | `test_schema.py` green |
+| 1.3 | 14 models, deletion policy, 8 named indexes | `test_schema.py` green |
 | 1.4 | Alembic: autogenerate from an **empty** DB, import fix, round-trip | `upgrade → downgrade → upgrade` clean |
 | 1.5 | Auth: register, login, session, magic-link exchange | `test_auth.py` |
 | 1.6 | Project CRUD + ownership scoping | `test_projects.py` |
@@ -24,7 +24,7 @@ Dossier 00–17, skill gate established, `git init` before the first file.
 | 1.8 | Boundary test (`routers/` may not import `models/`), ruff clean | `test_boundaries.py` |
 
 **Gate G1:** 70+ tests green, coverage ≥ 80%, migration round-trip clean, audit PASS on Tasks 1–5.
-**Status: blocks 1.1–1.4 complete** — repo, config, `Money`, `database.py`, 14 models, 8 indexes, generated migration, schema tests (49 tests, 99.05%, round-trip proven). Block 1.5 onward are unstarted.
+**Status: blocks 1.1–1.4 complete** — repo, config, `Money`, `database.py`, 14 models, 8 named indexes (11 `create_index` calls), generated migration, schema tests (50 tests, 99.05%, round-trip proven). Block 1.5 onward are unstarted.
 
 **Risk on Day 1:** this is the highest-risk day because nothing is demoable at the end of it. Resist the urge to jump to the UI; every later day assumes the schema is right.
 

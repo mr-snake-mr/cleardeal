@@ -4,9 +4,9 @@ Every row is a behaviour the build must produce, and the test that proves it. A 
 
 Legend — **T** = the test that proves the row. **E** = the Playwright scenario in [12](12-TESTING-STRATEGY.md) §4, `E1`–`E9`.
 
-**Read this before trusting the T column.** At the 09-NOV rebuild, six of the named tests exist:
+**Read this before trusting the T column.** At the 09-NOV rebuild, eight of the named tests exist:
 
-`test_budget_must_be_positive` (I-1, I-2) · `test_only_one_active_payment_per_milestone` (P-2) · `test_money_round_trips_without_drift` (I-4) · `test_money_records_block_project_deletion` (D-1) · `test_audit_events_survive_project_deletion` (D-3) · `test_foreign_key_enforcement_is_actually_on` (D-7).
+`test_budget_must_be_positive` (I-1, I-2) · `test_money_round_trips_without_drift` (I-4) · `test_only_one_active_payment_per_milestone` (P-2) · `test_money_records_block_project_deletion` (D-1) · `test_audit_events_survive_project_deletion` (D-3) · `test_health_reports_503_when_migrations_are_pending` (D-5) · `test_health_reports_degraded_when_db_ping_fails` (D-6) · `test_foreign_key_enforcement_is_actually_on` (D-7).
 
 Every other id is **the name the test will have when its block in [13](13-SCHEDULE.md) runs**. That is a specification, not evidence. Presenting a named-but-unwritten test as proof is the exact failure this dossier exists to prevent, so it is stated here rather than discovered by a reader.
 
@@ -112,7 +112,7 @@ Every other id is **the name the test will have when its block in [13](13-SCHEDU
 | D-3 | Delete a project with audit rows | audit rows survive with `project_id = NULL` | T-`test_audit_events_survive_project_deletion` |
 | D-4 | Delete an `ai_runs` project | run rows survive with `project_id = NULL` | T-`test_ai_runs_survive_project_deletion` |
 | D-5 | Fresh database, no migrations applied | health reports `migrations: "pending"` with HTTP `503`, and the app still boots | T-`test_health_reports_503_when_migrations_are_pending` |
-| D-6 | Database file deleted underneath a running process | health reports `error`, not "ok" and not "pending" | T-`test_health_reports_degraded_when_db_ping_fails` |
+| D-6 | Database file deleted underneath a running process | health reports `db: "unreachable"`, `migrations: "unknown"`, HTTP `503` — never "ok" | T-`test_health_reports_degraded_when_db_ping_fails` |
 | D-7 | Foreign key enforced on a fresh connection | pragma actually on; a violating insert raises | T-`test_foreign_key_enforcement_is_actually_on` |
 
 ## 8. Auth and authorisation
@@ -156,5 +156,5 @@ Every other id is **the name the test will have when its block in [13](13-SCHEDU
 Called out because they are the ones that pass review and fail a judge:
 
 1. **P-7** — capture timeout. The instinct is `try/except: retry`. That instinct double-captures.
-2. **A-8** — a *false* downgrade from whitespace normalisation. Only testing the invented-quote direction leaves the opposite bug invisible.
+2. **AI-8** — a *false* downgrade from whitespace normalisation. Only testing the invented-quote direction leaves the opposite bug invisible.
 3. **D-3** — audit survives project deletion. An earlier version of this test performed the `SET NULL` by hand, which meant `CASCADE` would have passed too. The database must perform the deletion for the test to mean anything.
