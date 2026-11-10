@@ -35,7 +35,7 @@ That rejection rule is the whole product. An AI that reads contracts is not nove
 | Dossier `docs/00`-`docs/18` | complete; audited to PASS, twice |
 | Database schema, 14 tables | done, migrations reversible (upgrade -> downgrade -> upgrade) |
 | Money handling (exact cents, no float) | done, tested across both dialects' type bindings |
-| Test suite | **312 tests, 92.58% coverage, `ruff` clean** |
+| Test suite | **325 tests, 92.58% coverage, `ruff` clean** |
 | Auth, projects, merchants, agreements, payments, webhook, M3 scope check | done and audited |
 | Invitations and the client principal | done; the dual-approval hole (A-15) is closed |
 | Frontend | one page, served by the app, walks the whole path |

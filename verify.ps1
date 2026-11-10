@@ -1,11 +1,17 @@
 # One command that answers "is it real".
 #
-# It runs the three things a claim about this repo rests on, in the order that
-# fails fastest: lint, migrations from empty, then the suite. Anything non-zero
-# stops the run, because a partial verification reported as success is worse than
-# no verification.
+# It runs the things a claim about this repo rests on, in the order that fails
+# fastest: the skill gate, lint, migrations from empty, then the suite. Anything
+# non-zero stops the run, because a partial verification reported as success is
+# worse than no verification.
+#
+# `Continue`, not `Stop`: alembic writes its INFO log to stderr, and PowerShell
+# 5.1 raises a NativeCommandError for that whenever the output is captured or
+# redirected — so `.\verify.ps1 > log.txt` died inside a successful migration.
+# Strictness comes from the explicit $LASTEXITCODE checks below, which nothing
+# can skip.
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $backend = Join-Path $PSScriptRoot "backend"
 $python = Join-Path $backend ".venv\Scripts\python.exe"
 

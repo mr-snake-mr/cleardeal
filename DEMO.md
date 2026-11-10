@@ -97,5 +97,5 @@ One breath, no hedging:
   a live call.
 - **No PayPal credentials:** stop after 1:20. The order-create screen says
   `MERCHANT_NOT_CONNECTED`, which is true and honest.
-- **Migrated database:** `git status` clean, `pytest` 312 passing is the
+- **Migrated database:** `git status` clean, `pytest` 325 passing is the
   five-second answer to "is it real".

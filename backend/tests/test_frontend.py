@@ -82,3 +82,14 @@ def test_the_page_opens_the_agreement_named_in_the_link(client):
 
     assert "URLSearchParams" in html
     assert '"v"' in html or "'v'" in html
+
+def test_the_client_view_is_presentation_only(client):
+    """The client arrives with one job. Hiding the freelancer's controls is a
+    CSS class on <body>; it is not the rule. The rule is the POST below it, which
+    the server refuses for an account that is not the invited client."""
+    html = client.get(PAGE).text
+
+    assert ".client-view #auth-section" in html, "the freelancer setup form is not hidden"
+    assert "Sign as the client in this tab" in html, "no same-tab accept path"
+    assert 'classList.add("client-view")' in html
+    assert "/approve" in html, "the page must still ask the server to sign"

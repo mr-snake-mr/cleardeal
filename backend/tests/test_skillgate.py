@@ -118,3 +118,23 @@ def test_a_complete_ledger_passes(tmp_path: Path, skills: Path) -> None:
 
     assert result.returncode == 0, result.stdout
     assert "PASS (1 applied, 5 ruled out)" in result.stdout
+
+
+def test_the_committed_ledger_passes() -> None:
+    """The rule is only hard if the repo's own ledger is held to it.
+
+    Skipped, not passed, where the skills are not installed: on such a machine
+    the gate cannot verify a single name, and a green tick there would be a lie.
+    """
+    result = subprocess.run(  # noqa: S603 - fixed argv, no shell
+        [sys.executable, str(TOOL)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if "skills directory not found" in result.stdout:
+        pytest.skip("skills are not installed on this machine")
+
+    assert result.returncode == 0, result.stdout
+    assert "SKILL GATE: PASS" in result.stdout
