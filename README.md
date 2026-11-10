@@ -175,9 +175,21 @@ Read [`docs/00-README.md`](docs/00-README.md) first; it is the index and it stat
 
 
 
+## The tools this uses, named
+
+| Tool | Where it is used | What it does |
+|---|---|---|
+| **PayPal Orders v2 — create order** | `backend/app/services/paypal.py` | Creates a sandbox order for one milestone. The amount is read from the milestone row and formatted server-side; the HTTP request carries no amount field. |
+| **PayPal Orders v2 — capture** | same module, `POST /payments/{id}/capture` | Asks PayPal to capture the approved order, then reads back the captured amount and status. A response whose total disagrees sets `RECONCILIATION_REQUIRED` instead of marking the milestone paid. |
+| **PayPal webhooks** | `backend/app/routers/webhooks.py` | Verifies the signature of `PAYMENT.CAPTURE.*` notifications with the registered webhook id, so a capture is confirmed by PayPal rather than by the browser. |
+| **PayPal sandbox** | `PAYPAL_ENV` in `.env`, surfaced on `/health` | Every call above runs against `api-m.sandbox.paypal.com`. `/health` reports `paypal_env` so a demo cannot mistake sandbox for live. |
+| **Google Gemini** (`gemini-3.5-flash-lite`, structured output) | `backend/app/ai/client.py` | Three jobs, each with a JSON schema and a validator that can reject the answer: turn the brief into requirements, draft the agreement, classify a new ask against the approved scope. |
+
+No other sponsor tool is integrated. The project is deployed on **Render**, which is why `render.yaml` is in the repository.
+
 ## Licence
 
+MIT — see [`LICENSE`](LICENSE).
 
-
-Hackathon submission. Third-party skill repositories used during development are not vendored here; they carry their own licences.
+Third-party skill repositories used during development are not vendored here; they carry their own licences.
 
