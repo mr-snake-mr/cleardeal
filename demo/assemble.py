@@ -75,25 +75,49 @@ def main() -> int:
         "[v0][v1][v2]concat=n=3:v=1:a=0[vout]",
     ]
 
-    inputs = ["-i", str(OUT / "page1.webm"), "-i", str(OUT / "page2.webm")]
     offsets = {"page1": 0.0, "page2": a_len}
 
-    for index, (name, (page, key, delta)) in enumerate(NARRATION.items(), start=2):
+    def wanted_start(page: str, key: str, delta: float) -> float:
+        """Where the beat lands on the assembled timeline."""
+        second = marks[page][key] + delta
+        if page == "page2":
+            return max(0.0, second + offsets["page2"])
+        return max(0.0, second) if second < c_start else a_len + b_len + (second - c_start)
+
+    # Lay the narration out in one pass, in time order, and never let a line
+    # start before the previous one has finished. A beat can arrive early — a
+    # fast take, a short wait — and two voices over each other is the fastest
+    # way to make a demo sound unedited.
+    schedule: list[tuple[str, float, float]] = []
+    cursor = 0.0
+    for name, (page, key, delta) in sorted(
+        NARRATION.items(), key=lambda item: wanted_start(*item[1])
+    ):
         clip = AUDIO / f"{name}.mp3"
         if not clip.exists():
             print(f"missing narration: {clip}")
             return 1
-        inputs += ["-i", str(clip)]
-        second = marks[page][key] + delta
-        if page == "page2":
-            absolute = second + offsets["page2"]
-        elif second < c_start:
-            absolute = second  # inside cut A, which starts at zero
-        else:
-            # Inside cut C, which begins after both earlier cuts.
-            absolute = a_len + b_len + (second - c_start)
-        delay = max(0, int(absolute * 1000))
+        length = probe(clip)
+        start = max(wanted_start(page, key, delta), cursor)
+        schedule.append((name, start, length))
+        cursor = start + length + 0.25
+
+    for (name, start, length), (next_name, next_start, _) in zip(schedule, schedule[1:]):
+        if start + length > next_start:
+            print(f"FAIL: {name} still overlaps {next_name}")
+            return 1
+
+    inputs = ["-i", str(OUT / "page1.webm"), "-i", str(OUT / "page2.webm")]
+    for index, (name, start, _) in enumerate(schedule, start=2):
+        inputs += ["-i", str(AUDIO / f"{name}.mp3")]
+        delay = max(0, int(round(start * 1000)))
         graph.append(f"[{index}:a]adelay={delay}|{delay}[a{index - 1}]")
+
+    print(
+        "narration: "
+        + ", ".join(f"{n}@{s:.1f}s+{d:.1f}" for n, s, d in schedule)
+        + f" - {len(schedule)} clips, no overlap"
+    )
 
     mix = "".join(f"[a{i}]" for i in range(1, len(NARRATION) + 1))
     graph.append(f"{mix}amix=inputs={len(NARRATION)}:normalize=0[aout]")
