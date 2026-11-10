@@ -43,6 +43,12 @@ services:
       # is the product's front door, so this is required, not optional.
       - key: GEMINI_API_KEY
         sync: false
+      # Not a secret, and pinning it here matters: the code default is
+      # `gemini-3.8-flash`, which answered 503 on every attempt on 2026-11-10,
+      # and the free tier's 20-requests-per-day cap is *per model* — so the
+      # exhausted `gemini-2.5-flash` pool does not block this one.
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
       - key: ALLOWED_ORIGINS
         value: '["https://cleardeal.onrender.com"]'
       # Ephemeral on the free plan, on purpose. See the header.
