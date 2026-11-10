@@ -34,15 +34,15 @@ API = "https://api.vachana.ai/api/v1/tts/inference"
 VOICE = "Devika"  # en-IN, professional: a demo is a briefing, not a trailer
 MODEL = "timbre-v2.5"
 
-# One line per beat in DEMO.md. Short on purpose: the picture carries the rest,
-# and the whole video has to stay under three minutes.
+# One line per beat: what is happening on screen, and what to expect next. The
+# video is a walkthrough, so the narration narrates rather than advertises.
 SEGMENTS = {
-    "seg_1": "A client asks for six pages when the agreement says five. Today, nothing settles it.",
-    "seg_2": "The brief becomes requirements, and every one is marked explicit or inferred.",
-    "seg_3": "The draft is checked, not believed. Milestones must equal the budget to the cent.",
-    "seg_4": "The new ask is classified against the approved scope, with the sentence that proves it.",
-    "seg_5": "Two signatures need two principals. This link carries the client's own session.",
-    "seg_6": "Every verdict cites a section, or says it cannot. That is the product.",
+    "seg_1": "This is ClearDeal. A client asks for six pages when the agreement says five. Watch what happens at each step, and what to expect.",
+    "seg_2": "First the brief becomes requirements. Expect a table where every line is marked explicit or inferred, and every explicit one quotes the sentence that justifies it.",
+    "seg_3": "Next, the draft. Expect milestones that must equal the budget to the cent. If they miss, the draft is discarded and nothing is written.",
+    "seg_4": "Then the signatures. Expect the second one to need a second person: this link carries the client's own session, never yours.",
+    "seg_5": "Now the real test, a new request. Expect one of three verdicts, and a citation that resolves to a real section, or an honest cannot.",
+    "seg_6": "That is the product. Every claim about scope is checked, not believed.",
 }
 
 
