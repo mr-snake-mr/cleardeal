@@ -30,7 +30,7 @@ Then open <http://127.0.0.1:8000/health>.
 | 2 | `/health` HTTP status | `200` | `503` = database unreachable or migrations pending |
 | 3 | `/health` → `migrations` | a revision hash, e.g. `4f2a9c1e7b30` | `pending` / `none` / `error` → run `alembic -c alembic.ini upgrade head` |
 | 4 | `/health` → `paypal_env` | `sandbox` | if `live`, say so out loud before touching money |
-| 5 | `pytest` output | no `failed`, no `error`; **at most one** `skipped` | `test_ui_smoke.py` skips itself when Playwright or its chromium is missing — that one skip is honest. Any other skip is a test you are not running. |
+| 5 | `pytest` output | `312 passed`, no `failed`, no `error`; **at most one** `skipped` | `test_ui_smoke.py` skips itself when Playwright or its chromium is missing — that one skip is honest. Any other skip is a test you are not running. Baseline measured 2026-11-10: 312 passed, 0 skipped, 92.58% coverage, 248 s. |
 
 `migrations: "pending"` is not a warning, it is a stop: `health.py` returns `503`
 on purpose, because a service that cannot say which schema it is running is about
