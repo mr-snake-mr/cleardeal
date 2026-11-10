@@ -11,12 +11,13 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.crypto import CredentialUnreadable
 from app.database import get_db
+from app.links import base_url
 from app.routers.auth import CurrentUser
 from app.schemas.payments import CaptureRequest, PaymentCreatedOut, PaymentOut
 from app.services import merchants as merchant_service
@@ -119,6 +120,7 @@ def _credentials(db: Session, user_id: uuid.UUID) -> tuple[str, str]:
 )
 def create_payment(
     milestone_id: uuid.UUID,
+    request: Request,
     user: CurrentUser,
     db: DbSession,
     response: Response,
@@ -135,7 +137,7 @@ def create_payment(
 
     credentials = _credentials(db, user.id)
     client = paypal_client_for(credentials)
-    base = settings.allowed_origins[0].rstrip("/")
+    base = base_url(request)
 
     try:
         payment, replayed, approve_url = payment_service.create(

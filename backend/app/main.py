@@ -118,6 +118,8 @@ def create_app() -> FastAPI:
     app.include_router(payments.router, prefix="/api/v1")
     app.include_router(changes.router, prefix="/api/v1")
     app.include_router(invitations.router, prefix="/api/v1")
+    # No prefix: this is the URL a human clicks in an email.
+    app.include_router(invitations.root_router)
 
     # Installed after the routers so the handlers are the outermost layer and
     # catch failures raised inside route code as well as during validation.

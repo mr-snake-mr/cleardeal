@@ -170,6 +170,24 @@ def test_the_invitation_stores_a_hash_and_returns_the_token_once(client, db, ai)
     assert token not in stored.token_hash
 
 
+def test_the_invite_link_points_at_the_host_that_served_it(client, db, ai):
+    """A human pastes this link wherever the app is actually running.
+
+    It was built from `settings.allowed_origins[0]`, which defaults to
+    `http://localhost:5173` — an origin that only exists on a developer's
+    laptop. On the deployed host the client clicked it and got
+    ERR_CONNECTION_REFUSED, which blocks approval, which blocks payment and
+    the scope check. The link must be relative to the request that asked for it.
+    """
+    _signup(client)
+    project, _ = _project_and_version(client)
+
+    url = _invite(client, project["id"]).json()["invite_url"]
+
+    assert "localhost:5173" not in url
+    assert url.startswith("https://testserver/"), url
+
+
 def test_accepting_a_token_creates_the_client_and_uses_it_up(client, db, ai):
     _signup(client)
     project, _ = _project_and_version(client)
@@ -306,3 +324,20 @@ def test_an_uninvited_account_cannot_sign_as_the_client(client, db, ai):
     )
 
     assert response.status_code == 404, "not their project, so not found at all"
+
+
+def test_the_emailed_link_is_served_at_the_root(client, db, ai):
+    """The URL in the email must resolve on the server that sent it.
+
+    The handler lived under /api/v1 while the link said /invite/{token}, so a
+    real client clicked it and got {"code": "NOT_FOUND"}. The link is pasted out
+    of an email; it has to be the path the browser is actually given.
+    """
+    _signup(client)
+    project, _ = _project_and_version(client)
+    url = _invite(client, project["id"]).json()["invite_url"]
+    path = url.split("testserver", 1)[-1]
+
+    response = client.get(path, follow_redirects=False)
+
+    assert response.status_code == 303, response.text

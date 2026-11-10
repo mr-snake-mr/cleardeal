@@ -11,19 +11,25 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.database import get_db
+from app.links import base_url
 from app.routers.auth import CurrentUser, set_session
 from app.schemas.auth import Email, UserOut
 from app.services import invitations as invitation_service
 from app.services import projects as project_service
 
 router = APIRouter(tags=["invitations"])
+
+# The link a person clicks lives at the root, not under /api/v1: it is
+# pasted out of an email and reads {base}/invite/{token}. Mounting it under
+# the API prefix is why a deployed invitation answered 404 while the link
+# itself looked right.
+root_router = APIRouter()
 
 DbSession = Annotated[Session, Depends(get_db)]
 
@@ -34,13 +40,17 @@ class InviteCreate(BaseModel):
     email: Email
 
 
-def _base() -> str:
-    return settings.allowed_origins[0].rstrip("/")
+def _base(request: Request) -> str:
+    return base_url(request)
 
 
 @router.post("/projects/{project_id}/invitations", status_code=201)
 def invite(
-    project_id: uuid.UUID, payload: InviteCreate, user: CurrentUser, db: DbSession
+    project_id: uuid.UUID,
+    payload: InviteCreate,
+    request: Request,
+    user: CurrentUser,
+    db: DbSession,
 ) -> dict:
     project = project_service.get_for_owner(db, owner_id=user.id, project_id=project_id)
     if project is None:
@@ -64,7 +74,7 @@ def invite(
     return {
         "email": invitation.email,
         "expires_at": invitation.expires_at,
-        "invite_url": f"{_base()}/invite/{token}",
+        "invite_url": f"{_base(request)}/invite/{token}",
     }
 
 
@@ -107,7 +117,7 @@ def accept(token: str, db: DbSession, response: Response) -> UserOut:
     return user
 
 
-@router.get("/invite/{token}", include_in_schema=False)
+@root_router.get("/invite/{token}", include_in_schema=False)
 def accept_from_email(token: str, db: DbSession) -> RedirectResponse:
     """The link in the email. Same effect, then back to the page."""
     response = RedirectResponse("/?invite=accepted", status_code=303)

@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     # JSON array in the environment, e.g. ["http://localhost:5173"]
     allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
+    # The origin links are built against. Empty means "use the request's own
+    # base URL", which is right behind a tunnel and in tests. Set it on a host
+    # whose proxy is not trusted to forward the scheme (see docs/08).
+    public_base_url: str = ""
+
     # Constrained so a typo cannot silently produce a third environment.
     paypal_env: Literal["sandbox", "live"] = "sandbox"
     # The webhook id PayPal issues for this app. Empty means nothing verifies.
