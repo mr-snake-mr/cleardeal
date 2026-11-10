@@ -3,6 +3,10 @@
 Everything below runs against the one page at `/`. Nothing is pre-recorded: the
 agreement, the totals and the scope verdict are produced live from the brief.
 
+**Checking rather than presenting?** Use [`DEMO-CHECK.md`](DEMO-CHECK.md): same
+run, one row per claim, with the expected string and a counter-check that does
+not trust the screen.
+
 ## Before the clock starts (60 seconds, offline)
 
 ```powershell
