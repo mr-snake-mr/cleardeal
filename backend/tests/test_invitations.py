@@ -1,7 +1,7 @@
 """Client access: a magic link, and two principals who cannot be one person.
 
 This is the block that deletes A-15. Until now `role` was whatever the request
-body said, and the only caller who could reach `approve` was the owner — so one
+body said, and the only caller who could reach `approve` was the owner â€” so one
 person could sign twice and the audit row said "the client approved".
 
 Three properties make that impossible:
@@ -174,7 +174,7 @@ def test_the_invite_link_points_at_the_host_that_served_it(client, db, ai):
     """A human pastes this link wherever the app is actually running.
 
     It was built from `settings.allowed_origins[0]`, which defaults to
-    `http://localhost:5173` — an origin that only exists on a developer's
+    `http://localhost:5173` â€” an origin that only exists on a developer's
     laptop. On the deployed host the client clicked it and got
     ERR_CONNECTION_REFUSED, which blocks approval, which blocks payment and
     the scope check. The link must be relative to the request that asked for it.
@@ -334,10 +334,15 @@ def test_the_emailed_link_is_served_at_the_root(client, db, ai):
     of an email; it has to be the path the browser is actually given.
     """
     _signup(client)
-    project, _ = _project_and_version(client)
+    project, version = _project_and_version(client)
     url = _invite(client, project["id"]).json()["invite_url"]
     path = url.split("testserver", 1)[-1]
 
     response = client.get(path, follow_redirects=False)
 
     assert response.status_code == 303, response.text
+    location = response.headers["location"]
+    assert location.startswith("/?invite=accepted"), location
+    assert f"v={version['id']}" in location, (
+        "the page has no other way to learn which agreement the client must sign"
+    )

@@ -1,7 +1,7 @@
 """Invitation routes: the owner sends, the client accepts.
 
 `GET /invite/{token}` is the link a person clicks, so it is a GET with an effect
-— the usual magic-link compromise. It redirects to the page rather than returning
+â€” the usual magic-link compromise. It redirects to the page rather than returning
 JSON, because the click comes from an email client, not from our JavaScript.
 """
 
@@ -20,6 +20,7 @@ from app.database import get_db
 from app.links import base_url
 from app.routers.auth import CurrentUser, set_session
 from app.schemas.auth import Email, UserOut
+from app.services import changes as change_service
 from app.services import invitations as invitation_service
 from app.services import projects as project_service
 
@@ -78,9 +79,9 @@ def invite(
     }
 
 
-def _accept(db: Session, token: str) -> UserOut:
+def _accept(db: Session, token: str) -> tuple[UserOut, object]:
     try:
-        user, _ = invitation_service.accept(db, token=token, now=datetime.now(UTC))
+        user, invitation = invitation_service.accept(db, token=token, now=datetime.now(UTC))
     except invitation_service.InvitationUnknown:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -107,24 +108,35 @@ def _accept(db: Session, token: str) -> UserOut:
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "INVITATION_EXPIRED", "message": "This invitation has expired."},
         ) from None
-    return UserOut.model_validate(user)
+    return UserOut.model_validate(user), invitation
 
 
 @router.post("/invitations/{token}/accept", response_model=UserOut)
 def accept(token: str, db: DbSession, response: Response) -> UserOut:
-    user = _accept(db, token)
+    user, _ = _accept(db, token)
     set_session(response, user.id)
     return user
 
 
 @root_router.get("/invite/{token}", include_in_schema=False)
 def accept_from_email(token: str, db: DbSession) -> RedirectResponse:
-    """The link in the email. Same effect, then back to the page."""
-    response = RedirectResponse("/?invite=accepted", status_code=303)
+    """The link in the email. Same effect, then back to the page.
+
+    The redirect carries the version id. A client who has just accepted holds a
+    session and nothing else — the page keeps its project in memory, and a
+    session does not tell it which agreement to open. Without `v` the client
+    lands on an empty form with a valid session and no approve button, which is
+    what the deployed host did on 2026-11-10.
+    """
     try:
-        user = _accept(db, token)
+        user, invitation = _accept(db, token)
     except HTTPException as exc:
         code = (exc.detail or {}).get("code", "INVITATION_INVALID")
         return RedirectResponse(f"/?invite={code}", status_code=303)
+    version = change_service.current_version(db, invitation.project_id)
+    target = "/?invite=accepted"
+    if version is not None:
+        target = f"{target}&v={version.id}"
+    response = RedirectResponse(target, status_code=303)
     set_session(response, user.id)
     return response

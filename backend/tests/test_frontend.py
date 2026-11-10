@@ -69,3 +69,16 @@ def test_the_page_captures_the_order_it_created(client):
 
     assert "/capture" in html, "the page can create an order but never capture it"
     assert "capturePayment" in html
+
+
+def test_the_page_opens_the_agreement_named_in_the_link(client):
+    """A client arrives from an email holding a session and nothing else.
+
+    The page must read the version id the server put in the query string;
+    without it the client lands on a blank form with no approve button, which is
+    exactly what happened on the deployed host on 2026-11-10.
+    """
+    html = client.get(PAGE).text
+
+    assert "URLSearchParams" in html
+    assert '"v"' in html or "'v'" in html

@@ -385,6 +385,26 @@ $("check").addEventListener("click", async () => {
     say("change-status", "Checked against version " + (state.version ? state.version.version_no : "current") + ".", "ok");
   } catch (error) { say("change-status", error.message, "bad"); }
 });
+
+// A client arrives from the invitation link holding a session and nothing else.
+// The server puts the version id in the query string, because a session says who
+// you are, not which agreement you are here to sign.
+const params = new URLSearchParams(window.location.search);
+const linkedVersion = params.get("v");
+if (linkedVersion) {
+  (async () => {
+    try {
+      state.version = await api("/agreements/" + linkedVersion);
+      renderVersion();
+      renderPay();
+      if (params.get("invite") === "accepted") {
+        say("agreement-status", "Invitation accepted. Read it, then sign as the client.", "ok");
+      }
+    } catch (error) { say("agreement-status", error.message, "bad"); }
+  })();
+} else if (params.get("invite") && params.get("invite") !== "accepted") {
+  say("agreement-status", "That invitation cannot be used: " + params.get("invite") + ".", "bad");
+}
 </script>
 </body>
 </html>
