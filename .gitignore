@@ -26,3 +26,8 @@ demo/audio/
 demo/failure.png
 *.webm
 *.mp4
+
+# Scratch: test output and recorder logs
+backend/sg.txt
+backend/t1.txt
+demo/out/
