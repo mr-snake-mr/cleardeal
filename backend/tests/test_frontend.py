@@ -55,3 +55,17 @@ def test_the_page_requires_two_principals(client):
     assert "/invitations" in html
     assert "Invite the client" in html
     assert "its own session" in html
+
+
+def test_the_page_captures_the_order_it_created(client):
+    """Creating an order is half a payment.
+
+    Without a capture the page can reach APPROVED and never PAID — and the
+    webhook cannot rescue it, because PayPal only emits
+    PAYMENT.CAPTURE.COMPLETED once a capture exists. Found on the deployed host
+    on 2026-11-10: the page printed an approve link and stopped there.
+    """
+    html = client.get(PAGE).text
+
+    assert "/capture" in html, "the page can create an order but never capture it"
+    assert "capturePayment" in html

@@ -334,9 +334,29 @@ async function createOrder(milestoneId) {
       body: "{}",
     });
     $("pay-out").insertAdjacentHTML("beforeend", `
-      <p class="note">Order <code>${payment.paypal_order_id}</code> ·
-        <a href="${payment.approve_url}" rel="noreferrer noopener" target="_blank">Approve in PayPal</a></p>`);
-    say("pay-status", "Order created. Capture happens server-side only after PayPal proves it.", "ok");
+      <p class="note">Order <code>${payment.paypal_order_id}</code> · ${money(payment.amount)} ·
+        <a href="${payment.approve_url}" rel="noreferrer noopener" target="_blank">Approve in PayPal</a>
+        <button class="quiet" data-capture="${payment.payment_id}">I approved it — capture</button></p>`);
+    $("pay-out")
+      .querySelector(`button[data-capture="${payment.payment_id}"]`)
+      .addEventListener("click", () => capturePayment(payment.payment_id, payment.paypal_order_id));
+    say("pay-status", "Order created. Approve it in PayPal, then capture — the server asks PayPal to prove it first.", "ok");
+  } catch (error) { say("pay-status", error.message, "bad"); }
+}
+
+// Creating the order is only half a payment. Without this the page can reach
+// APPROVED and never PAID, and no webhook can rescue it: PayPal emits
+// PAYMENT.CAPTURE.COMPLETED only once a capture exists.
+async function capturePayment(paymentId, orderId) {
+  say("pay-status", "Asking PayPal to capture…");
+  try {
+    const payment = await api("/payments/" + paymentId + "/capture", {
+      method: "POST",
+      body: JSON.stringify({ paypal_order_id: orderId }),
+    });
+    const captured = payment.captured_at ? " · " + payment.captured_at : "";
+    say("pay-status", `Captured ${money(payment.amount)} · ${payment.status}${captured}`, "ok");
+    renderPay();
   } catch (error) { say("pay-status", error.message, "bad"); }
 }
 
