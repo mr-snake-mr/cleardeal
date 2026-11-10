@@ -192,8 +192,14 @@ $("login").addEventListener("click", async () => {
       body: JSON.stringify({ ...credentials, name: "Demo" }),
     });
   } catch (error) {
-    // Already registered is the normal path on a second run.
-    if (!/exists|duplicate/i.test(error.message)) { say("auth-status", error.message, "bad"); return; }
+    // Already registered is the normal path on a second run — and the server
+    // words it "That address is already registered.", which the old
+    // /exists|duplicate/ test did not match, so a returning user could never
+    // sign in: the page stopped before it tried.
+    if (!/(exists|duplicate|already)/i.test(error.message)) {
+      say("auth-status", error.message, "bad");
+      return;
+    }
   }
   try {
     await api("/auth/login", { method: "POST", body: JSON.stringify(credentials) });
@@ -439,6 +445,10 @@ if (linkedVersion) {
     try {
       state.version = await api("/agreements/" + linkedVersion);
       renderVersion();
+      // The actions ship hidden and were only revealed by the freelancer's
+      // draft handler. A client arriving from an invitation never presses
+      // Draft, so without this the one button they came to press stays hidden.
+      $("agreement-actions").classList.remove("hidden");
       renderPay();
       if (params.get("invite") === "accepted") {
         // The client has one job on this page. Hiding the freelancer's controls

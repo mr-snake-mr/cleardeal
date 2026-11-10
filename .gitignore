@@ -18,3 +18,11 @@ dist/
 # Agent scratch
 .sdd/
 build/
+
+# Demo recording: credentials, raw takes and generated audio stay local
+demo/.gnani-key
+demo/raw/
+demo/audio/
+demo/failure.png
+*.webm
+*.mp4

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 import uuid
 from collections.abc import Callable
@@ -38,6 +39,8 @@ INPUT_USD_PER_1M = 0.75
 OUTPUT_USD_PER_1M = 3.75
 
 BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+LOGGER = logging.getLogger(__name__)
 
 
 class AiUnavailable(RuntimeError):
@@ -280,6 +283,16 @@ class GeminiClient:
                 status_code = exc.response.status_code
                 last = exc
                 if 400 <= status_code < 500:
+                    # The provider says *why* in the body, and it is the only
+                    # thing that separates a rejected schema from a rejected
+                    # key. Log it; do not put it in the message, where it would
+                    # travel to the browser.
+                    LOGGER.warning(
+                        "provider rejected %s (%s): %s",
+                        module,
+                        status_code,
+                        exc.response.text[:600],
+                    )
                     # Not retryable: a bad request stays bad, and a bad key is
                     # not fixed by asking twice.
                     self._emit(
