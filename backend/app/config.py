@@ -45,7 +45,14 @@ class Settings(BaseSettings):
     # unaffected; it never blocks the demo (docs/05 §9).
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
-    ai_timeout_seconds: float = 10.0
+    # 30, not 10. A flash model under load routinely needs more than ten
+    # seconds, and the client is specified to give up after exactly one retry
+    # (05 §5). At 10s that rule turned a working provider into `503
+    # AI_UNAVAILABLE`: on 2026-11-10 four consecutive attempts recorded
+    # `transport_error` while the fifth returned a good answer. The timeout is
+    # a budget for the provider, not a promise about latency — the UI shows a
+    # spinner either way.
+    ai_timeout_seconds: float = 30.0
 
     # Model B only. Absent key = credential storage refuses to run rather than
     # writing plaintext (app/crypto.py). Deliberately not defaulted to a value:
