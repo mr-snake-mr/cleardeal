@@ -287,7 +287,10 @@ class GeminiClient:
                             module=module,
                             model=self._model,
                             prompt_hash=digest,
-                            status="client_error",
+                            # The code, not just the category. "client_error"
+                            # cannot separate a rejected key (403) from a rate
+                            # limit (429), which are opposite problems.
+                            status=f"client_error:{status_code}",
                         ),
                         project_id,
                     )

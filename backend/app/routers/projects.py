@@ -99,12 +99,16 @@ def analyse_project(project_id: uuid.UUID, user: CurrentUser, db: DbSession) -> 
                 "message": "The analysis service is unavailable. The project was not changed.",
             },
         ) from None
-    except AiInvalidRequest:
+    except AiInvalidRequest as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={
                 "code": "AI_INVALID_REQUEST",
-                "message": "The analysis service rejected the request.",
+                # The reason travels: "rejected the request (403)" is the
+                # difference between a wrong key and a rate limit, and the UI
+                # already prints `message`. It carries no key and no URL — the
+                # client raises `from None` precisely so neither leaks.
+                "message": f"The analysis service rejected the request. ({exc})",
             },
         ) from None
     except AiInvalidOutput:

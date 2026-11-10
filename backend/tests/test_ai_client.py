@@ -250,17 +250,24 @@ def test_two_transient_failures_raise_and_do_not_loop(db):
 
 
 def test_a_client_error_is_not_retried(db):
-    """A 400 from a bad schema will be a 400 again; retrying burns the demo's time."""
-    transport = FakeTransport(_status(400), _ok())
+    """A 400 from a bad schema will be a 400 again; retrying burns the demo's time.
+
+    The provider's status code travels with the record. `client_error` alone
+    cannot tell a wrong key (403) from a rate limit (429), and on 2026-11-10
+    that ambiguity cost an hour: the UI said "Request failed", the database said
+    `client_error`, and the answer was a stale key in the shell environment.
+    """
+    transport = FakeTransport(_status(403), _ok())
     client = GeminiClient(
         api_key="k", model="m", transport=transport, record=make_recorder(db)
     )
 
-    with pytest.raises(AiInvalidRequest):
+    with pytest.raises(AiInvalidRequest) as raised:
         client.generate(module="m1", prompt="p", schema=Answer)
 
     assert transport.calls == 1
-    assert db.execute(select(AiRun)).scalar_one().validation_status == "client_error"
+    assert db.execute(select(AiRun)).scalar_one().validation_status == "client_error:403"
+    assert "403" in str(raised.value)
 
 
 def test_a_connection_error_is_retried_then_raises(db):
