@@ -43,6 +43,7 @@ Rule for the build: an assumption that turns out false must change the documents
 |---|---|
 | **Assumption** | Exchanging a freelancer's `client_id` / `client_secret` for a token exposes their PayPal merchant id, so `merchant_accounts.paypal_merchant_id` can be filled at connect time |
 | **Status** | **Refuted, 2026-11-10.** A real sandbox token exchange returned exactly `scope, access_token, token_type, app_id, expires_in, nonce`. There is an `app_id` (`APP-8H899147DU8087438`) and no merchant id, so the column cannot be filled at connect time |
+| **Related, 2026-11-10** | AI Studio shows an *unrestricted* key in the same Cloud project. Its banner states unrestricted keys stopped working on **19 June 2026**, which is exactly why a stale `GEMINI_API_KEY` left in the shell environment produced a **403** — and a 403 surfaced as the same `client_error` as a rate limit until the status code was recorded |
 | **How to close** | Same session as A-2: inspect the token response and the first capture; if neither carries an id, the column stays `NULL` |
 | **If false** | `merchant_accounts.paypal_merchant_id` is populated from the first verified capture instead, and the connect screen simply does not show an id. 08 §9 is written to allow both. |
 | **Severity** | Low for the build, medium for wording — it must not be described as "we verify the merchant at connect time" |
@@ -57,6 +58,7 @@ Rule for the build: an assumption that turns out false must change the documents
 | **Verified** | Pricing page states \$0.75/\$3.75 per 1M tokens and a free tier, as of 2026-11-09 |
 | **Unverified** | Per-minute request limits and whether the free tier is throttled during the demo window |
 | **Observed 2026-11-10** | `gemini-3.8-flash` is a real model — it appears in `GET /v1beta/models` — but answered `503 UNAVAILABLE` ("high demand") on both attempts. `gemini-2.5-flash` answered immediately. **A 503 on the configured default is a live demo risk**: the model is right, its capacity is not guaranteed |
+| **Measured 2026-11-10 (account side, AI Studio)** | The key belongs to project **shorts-uploader**, free tier, **no billing account linked**. Ceiling for `gemini-2.5-flash`: **5 RPM, 20 RPD**, 250K TPM. At the time of inspection **17 of 20 daily requests were spent (85%)**, and a second key in the same project shares that same pool. Console telemetry for the API over 24 h: **35% errors**, median latency **10.6 s**, 95th percentile **385 s**. So the 503s are provider saturation on a near-exhausted free pool — not a schema fault, not a quota 429. **A demo that spends more than ~20 AI calls in a day will fail on the 21st**; one failing call costs two requests because of the single retry |
 | **If false** | Two API keys, one per module group; or pay-as-you-go — a full demo run costs under \$0.02 (05 §7) |
 | **Severity** | Low |
 
