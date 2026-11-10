@@ -1,5 +1,17 @@
-# Render blueprint. Unverified against a live deploy: no account was available
-# when this was written, and `render.yaml` is not schema-checked locally.
+# Render blueprint.
+#
+# Free plan: no persistent disk. Render only attaches disks to paid services,
+# and a free service's filesystem is wiped on every deploy *and* every idle
+# spin-down. The database below is therefore disposable — projects, agreements
+# and the encrypted merchant credentials all vanish when the instance sleeps.
+# Upgrade to `starter` and re-add the disk block before anything that must
+# survive a restart:
+#
+#   plan: starter
+#   disk:
+#     name: cleardeal-data
+#     mountPath: /data
+#   # and set DATABASE_URL to sqlite:////data/cleardeal.db
 services:
   - type: web
     name: cleardeal
@@ -18,20 +30,21 @@ services:
         generateValue: true
       - key: CREDENTIALS_ENCRYPTION_KEY
         generateValue: true
-      # Set by hand in the dashboard: a merchant's REST credentials and the
-      # webhook id PayPal issues for this app. Empty PAYPAL_WEBHOOK_ID means
-      # every webhook is refused, which is the safe default.
-      - key: PAYPAL_CLIENT_ID
-        sync: false
-      - key: PAYPAL_CLIENT_SECRET
-        sync: false
+      # Set by hand in the dashboard. Empty PayPAL_WEBHOOK_ID means every
+      # webhook is refused, which is the safe default.
+      #
+      # There are deliberately no PAYPAL_CLIENT_ID / PAYPAL_CLIENT_SECRET here:
+      # merchant credentials are per-tenant, entered through the app's connect
+      # screen and encrypted at rest. `Settings` has no such fields, so env vars
+      # by those names would be dropped silently by `extra="ignore"`.
       - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      # Absent key = every analysis call returns 503 AI_UNAVAILABLE. Analysis
+      # is the product's front door, so this is required, not optional.
+      - key: GEMINI_API_KEY
         sync: false
       - key: ALLOWED_ORIGINS
         value: '["https://cleardeal.onrender.com"]'
+      # Ephemeral on the free plan, on purpose. See the header.
       - key: DATABASE_URL
-        value: sqlite:////data/cleardeal.db
-    disk:
-      name: cleardeal-data
-      mountPath: /data
-      sizeGB: 1
+        value: sqlite:///./cleardeal.db

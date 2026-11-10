@@ -20,4 +20,8 @@ EXPOSE 8000
 
 # Migrations run at start, not at build: the volume with the database does not
 # exist during a build, and a failed migration should fail the deploy loudly.
-CMD ["sh", "-c", "python -m alembic -c alembic.ini upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+#
+# The port comes from $PORT. Render forwards traffic to it (default 10000) and
+# fails the deploy if it cannot detect the bound port, so a hard-coded 8000 is a
+# coin flip. The fallback keeps `docker run -p 8000:8000` working locally.
+CMD ["sh", "-c", "python -m alembic -c alembic.ini upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
