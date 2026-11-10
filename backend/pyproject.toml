@@ -13,13 +13,19 @@ dependencies = [
     "pydantic-settings>=2.4",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
+    # Runtime, not test-only. `app/ai/client.py` imports it at module level, so
+    # while it sat in the `dev` extra a plain `pip install .` produced an image
+    # that built cleanly and then died on boot with
+    # `ModuleNotFoundError: No module named 'httpx'`. Every local run passed
+    # because the virtualenv had it installed for pytest. Found by the first
+    # real container, 2026-11-10.
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
-    "httpx>=0.27",
     "ruff>=0.6",
 ]
 
