@@ -11,7 +11,8 @@ Rule for the build: an assumption that turns out false must change the documents
 | | |
 |---|---|
 | **Assumption** | `POST /v2/checkout/orders/{id}/capture` returns a capture whose `payee.merchant_id` identifies the receiving merchant |
-| **Status** | **Unconfirmed, and now doubted.** The capture reference (`orders-capture`, fetched 2026-11-09) documents **no `payee` on the capture object**; `payee` appears in the *create-order request* body and in `payment_instruction.platform_fees`, neither of which is the capture response. A live sandbox response may still carry it — a documentation omission is not a guarantee — but the earlier wording here ("the reference documents a payee object on captures") was wrong and is corrected |
+| **Status** | **Still unconfirmed, but no longer doubted.** The capture reference (`orders-capture`, fetched 2026-11-09) documents **no `payee` on the capture object**; `payee` appears in the *create-order request* body and in `payment_instruction.platform_fees`, neither of which is the capture response. However, the sample `PAYMENT.CAPTURE.COMPLETED` payload in PayPal's own webhooks guide (fetched 2026-11-10) carries `"payee": {"email_address": …, "merchant_id": "QDGTZ7B92B9QT"}` on a `resource_type: capture` object — so captures do appear to carry a payee. That is the webhook resource, not the `POST /capture` response, which is why this stays open (2026-11-10) |
+| **Attempted** | 2026-11-10: a real sandbox order was created (`6CF48757T0439683C`); capture returned `ORDER_NOT_APPROVED`, as it must — the payer has to approve in a browser. The `payment_source.card` shortcut returned `PAYEE_NOT_ENABLED_FOR_CARD_PROCESSING`, the default for a fresh sandbox business account, so card-based capture cannot stand in for a payer. **A-2 still needs one human approval click** |
 | **How to close** | Block 2.2: create and capture one real sandbox order, save the JSON, grep for `payee`. `app/services/paypal.py::_extract_payee` surfaces the id when present and returns `None` when absent, so either outcome is a data change, not a code change |
 | **Time** | 20 minutes |
 | **If false** | Docs 03, 04, 08, 09 lose the "paid to (PayPal-verified)" claim. The UI shows "Paid — capture verified". Everything else stands. |
@@ -32,7 +33,7 @@ Rule for the build: an assumption that turns out false must change the documents
 | | |
 |---|---|
 | **Assumption** | PayPal accepts `PayPal-Request-Id` (or equivalent) on `POST /v2/checkout/orders` |
-| **Status** | Unconfirmed |
+| **Status** | **Confirmed, 2026-11-10.** Order creation with a `payment_source` refused the request with `PAYPAL_REQUEST_ID_REQUIRED` until the header was sent — the header exists and is honoured. Plain order creation does not require it, so the fallback below remains the correctness argument |
 | **Fallback already implemented** | Clearing reuses an existing `CREATED` order for the same milestone rather than creating a second, and `payments.idempotency_key` is `UNIQUE`. Correctness does not depend on the header. |
 | **Severity** | Low — a convenience, not a control |
 
@@ -41,7 +42,7 @@ Rule for the build: an assumption that turns out false must change the documents
 | | |
 |---|---|
 | **Assumption** | Exchanging a freelancer's `client_id` / `client_secret` for a token exposes their PayPal merchant id, so `merchant_accounts.paypal_merchant_id` can be filled at connect time |
-| **Status** | **Unconfirmed.** Nothing in 04 documents this: the only payee-identifier claim in the feasibility report concerns the *capture* response (A-2), not the token exchange |
+| **Status** | **Refuted, 2026-11-10.** A real sandbox token exchange returned exactly `scope, access_token, token_type, app_id, expires_in, nonce`. There is an `app_id` (`APP-8H899147DU8087438`) and no merchant id, so the column cannot be filled at connect time |
 | **How to close** | Same session as A-2: inspect the token response and the first capture; if neither carries an id, the column stays `NULL` |
 | **If false** | `merchant_accounts.paypal_merchant_id` is populated from the first verified capture instead, and the connect screen simply does not show an id. 08 §9 is written to allow both. |
 | **Severity** | Low for the build, medium for wording — it must not be described as "we verify the merchant at connect time" |
@@ -55,6 +56,7 @@ Rule for the build: an assumption that turns out false must change the documents
 | **Assumption** | Gemini 3.8 Flash is callable on the free tier at the volume a demo needs (≈60 calls/day) |
 | **Verified** | Pricing page states \$0.75/\$3.75 per 1M tokens and a free tier, as of 2026-11-09 |
 | **Unverified** | Per-minute request limits and whether the free tier is throttled during the demo window |
+| **Observed 2026-11-10** | `gemini-3.8-flash` is a real model — it appears in `GET /v1beta/models` — but answered `503 UNAVAILABLE` ("high demand") on both attempts. `gemini-2.5-flash` answered immediately. **A 503 on the configured default is a live demo risk**: the model is right, its capacity is not guaranteed |
 | **If false** | Two API keys, one per module group; or pay-as-you-go — a full demo run costs under \$0.02 (05 §7) |
 | **Severity** | Low |
 
@@ -63,7 +65,7 @@ Rule for the build: an assumption that turns out false must change the documents
 | | |
 |---|---|
 | **Verified** | `minItems`/`maxItems` are enforced; `minLength`, `maxLength`, `minProperties`, `maxProperties`, `uniqueItems`, `contains` are **silently stripped**; complex schemas can return `400 INVALID_ARGUMENT` |
-| **Unverified** | Whether the specific M2/M3 schemas are simple enough to avoid the 400. This is discovered by trying, not by reading |
+| **Verified 2026-11-10** | The M2/M3 schemas are accepted: a live `generateContent` call with `generation_schema(ChangeAnalysis)` returned `200`, and the JSON re-validated. **But the first live call 400'd**, on a case this analysis had missed: `_collapse_nullable` emitted `type: ["string", "null"]` and the endpoint rejected it — `Proto field is not repeating, cannot start list` — because `responseSchema` is a protobuf `Schema`, not JSON Schema. A test asserted the array, so the suite was green *because of* the bug. Fixed 2026-11-10; nullability now uses `nullable: true` |
 | **Mitigation already designed** | Generation schema kept shallow; every length/uniqueness rule re-implemented in Pydantic, because a rule that exists only in the schema does not exist |
 | **Severity** | Medium — a 400 here would cost 2–4 hours on Day 2 |
 
