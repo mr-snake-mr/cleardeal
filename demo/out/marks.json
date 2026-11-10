@@ -1,15 +1,16 @@
 {
   "page1": {
     "start": 1.3,
-    "project": 7.2,
-    "draft": 24.7,
-    "signature one": 34.2,
-    "invite": 37.8,
-    "scope check": 45.0,
-    "end": 57.1
+    "project": 6.8,
+    "draft": 26.0,
+    "signature one": 37.4,
+    "invite": 40.9,
+    "scope check": 47.8,
+    "payment": 56.0,
+    "end": 68.4
   },
   "page2": {
-    "client view": 0.9,
-    "approved": 4.1
+    "client view": 0.8,
+    "approved": 4.0
   }
 }

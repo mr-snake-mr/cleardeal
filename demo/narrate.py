@@ -42,6 +42,7 @@ SEGMENTS = {
     "seg_3": "Next, the draft. Expect milestones that must equal the budget to the cent. If they miss, the draft is discarded and nothing is written.",
     "seg_4": "Then the signatures. Expect the second one to need a second person: this link carries the client's own session, never yours.",
     "seg_5": "Now the real test, a new request. Expect one of three verdicts, and a citation that resolves to a real section, or an honest cannot.",
+    "seg_7": "Finally, payment. The merchant connects once, and the secret is never returned. The amount comes from the milestone row, and PayPal must prove the capture before anything is marked paid.",
     "seg_6": "That is the product. Every claim about scope is checked, not believed.",
 }
 

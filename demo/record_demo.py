@@ -35,6 +35,20 @@ BRIEF = (
 CLIENT_ASK = "Can you also add Google login and throw in the copywriting?"
 
 
+def paypal_credentials() -> tuple[str, str]:
+    """Read the sandbox pair from `backend/.env`, which is gitignored.
+
+    Typing them on camera is the point of the beat; keeping them out of this
+    file is the point of this function. Never print them.
+    """
+    env: dict[str, str] = {}
+    for line in (HERE.parent / "backend/.env").read_text(encoding="utf-8").splitlines():
+        if "=" in line and not line.startswith("#"):
+            key, value = line.split("=", 1)
+            env[key.strip()] = value.strip()
+    return env.get("PAYPAL_CLIENT_ID", ""), env.get("PAYPAL_CLIENT_SECRET", "")
+
+
 def inject_overlays(page: Page) -> None:
     page.evaluate(
         """() => {
@@ -226,7 +240,21 @@ def run(context: BrowserContext, client_context: BrowserContext) -> dict[str, di
     subtitle(page, "OUT_OF_SCOPE, with the sentence that proves it", 1200)
     page.evaluate("document.getElementById('change-out').scrollIntoView({block:'center'})")
     page.wait_for_timeout(1000)
-    subtitle(page, "Every verdict cites a section, or says it cannot", 1200)
+    subtitle(page, "Every verdict cites a section, or says it cannot", 900)
+
+    mark("page1", "payment")
+    subtitle(page, "Step 7 - Connect the merchant, then pay a milestone", 400)
+    page.evaluate("document.getElementById('pay-section').scrollIntoView({block:'start'})")
+    page.wait_for_timeout(300)
+    client_id, client_secret = paypal_credentials()
+    type_into(page, "#pp-id", client_id, "paypal client id", delay=4)
+    type_into(page, "#pp-secret", client_secret, "paypal client secret", delay=4)
+    click(page, "#connect", "connect merchant", pause=300)
+    wait_text(page, "#pay-status", "Merchant connected")
+    subtitle(page, "Stored encrypted; the form can never read the secret back", 900)
+    click(page, "#pay-out button[data-milestone]", "create order", pause=400)
+    wait_text(page, "#pay-status", "Order created")
+    subtitle(page, "Order created: the buyer approves in PayPal, then the server captures", 1500)
     mark("page1", "end")
     subtitle(page, "")
     return marks

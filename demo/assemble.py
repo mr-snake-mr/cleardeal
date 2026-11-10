@@ -37,7 +37,8 @@ NARRATION = {
     "seg_3": ("page1", "draft", 0.2),
     "seg_4": ("page1", "invite", 0.2),
     "seg_5": ("page1", "scope check", 0.3),
-    "seg_6": ("page1", "end", -3.4),
+    "seg_7": ("page1", "payment", 0.3),
+    "seg_6": ("page1", "end", -3.0),
 }
 
 
