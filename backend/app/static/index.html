@@ -53,6 +53,27 @@
   .status.ok { color: var(--accent); }
   .hidden { display: none; }
   .sum { font-family: ui-monospace, monospace; }
+  /* The client arrives from an invitation holding a session and one job: read,
+     then sign. Showing them the Freelancer's setup form invites them to click
+     buttons that will only be refused. */
+  .client-view #auth-section,
+  .client-view #project-section,
+  .client-view #analyse-section,
+  .client-view #pay-section,
+  .client-view #change-section,
+  .client-view .freelancer-only { display: none; }
+  .banner {
+    background: #eef7f2; border: 1px solid #b6d3c8; border-radius: 10px;
+    padding: 14px 16px; margin: 0 0 16px; font-size: 14px;
+  }
+  .banner p { margin: 0; }
+  .linkbox { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0 0; }
+  .linkbox code { overflow-wrap: anywhere; }
+  a.quiet {
+    display: inline-block; padding: 9px 14px; border: 1px solid var(--accent);
+    border-radius: 6px; background: #fff; color: var(--accent);
+    text-decoration: none; font-size: 16px;
+  }
 </style>
 </head>
 <body>
@@ -61,6 +82,8 @@
   <p class="sub">An approved scope, checked against — with evidence that resolves or a verdict that says it cannot.</p>
 </header>
 <main>
+
+<div id="client-banner" class="banner hidden" role="status"></div>
 
 <section id="auth-section">
   <h2>1 · Sign in</h2>
@@ -97,10 +120,10 @@
   <button id="draft">Draft agreement from accepted requirements</button>
   <div id="agreement-out"></div>
   <div id="agreement-actions" class="hidden">
-    <button class="quiet" id="send">Send to both parties</button>
-    <button class="quiet" id="approve-freelancer">Approve as freelancer</button>
+    <button class="quiet freelancer-only" id="send">Send to both parties</button>
+    <button class="quiet freelancer-only" id="approve-freelancer">Approve as freelancer</button>
     <button class="quiet" id="approve-client">Approve as client (own session only)</button>
-    <button class="quiet" id="invite">Invite the client</button>
+    <button class="quiet freelancer-only" id="invite">Invite the client</button>
   </div>
   <div id="invite-out"></div>
   <p class="status" id="agreement-status" role="status"></p>
@@ -274,12 +297,15 @@ $("approve-client").addEventListener("click", async () => {
       method: "POST", body: JSON.stringify({ role: "client" }),
     });
     renderVersion();
+    const signed = state.version.status === "APPROVED";
     say(
       "agreement-status",
-      "Each side signs from its own session: the freelancer here, the client " +
-      "from their own account or invitation link.",
-      "bad",
+      signed
+        ? "Client signature recorded. Both signatures are in: APPROVED."
+        : "Client signature recorded.",
+      "ok",
     );
+    if (signed) $("approve-client").disabled = true;
   } catch (error) { say("agreement-status", error.message, "bad"); }
 });
 
@@ -290,11 +316,28 @@ $("invite").addEventListener("click", async () => {
       method: "POST",
       body: JSON.stringify({ email: $("client-email").value }),
     });
+    const url = escapeHtml(invite.invite_url);
     $("invite-out").innerHTML = `
-      <p class="note">Client link, single use, expires in 72 hours:
-        <a href="${invite.invite_url}">${invite.invite_url}</a><br>
-        Open it in a private window: the client signs from their own session, not yours.</p>`;
-    say("agreement-status", "Invitation ready. Two signatures now need two people.", "ok");
+      <p class="note">Client link — single use, expires in 72 hours:</p>
+      <p class="linkbox"><code id="invite-link">${url}</code></p>
+      <p class="linkbox">
+        <button class="quiet" id="copy-link" type="button">Copy link</button>
+        <a class="quiet" href="${url}">Sign as the client in this tab</a>
+      </p>
+      <p class="note">Two signatures need two principals: the client signs from
+        its own session, never from yours. A private window keeps both open at
+        once; this tab replaces your session, and you sign back in as the
+        freelancer afterwards.</p>
+      <p class="status" id="invite-status" role="status"></p>`;
+    $("copy-link").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText($("invite-link").textContent);
+        say("invite-status", "Link copied.", "ok");
+      } catch {
+        say("invite-status", "Clipboard blocked — select the link and copy it by hand.", "bad");
+      }
+    });
+    say("agreement-status", "Invitation ready: copy the link, then sign as the client.", "ok");
   } catch (error) { say("agreement-status", error.message, "bad"); }
 });
 
@@ -398,7 +441,23 @@ if (linkedVersion) {
       renderVersion();
       renderPay();
       if (params.get("invite") === "accepted") {
-        say("agreement-status", "Invitation accepted. Read it, then sign as the client.", "ok");
+        // The client has one job on this page. Hiding the freelancer's controls
+        // is a presentation change only: every refusal is still decided by the
+        // server, which does not know a CSS class exists.
+        document.body.classList.add("client-view");
+        $("approve-client").textContent = "Sign as client";
+        say("agreement-status", "Invitation accepted. Read it, then sign.", "ok");
+        try {
+          const me = await api("/auth/me");
+          // Unhide before writing: a live region that is display:none when its
+          // content arrives is not announced (WCAG 2.2 SC 4.1.3).
+          $("client-banner").classList.remove("hidden");
+          $("client-banner").innerHTML =
+            `<p><strong>${escapeHtml(me.email)}</strong> is signed in as the client ` +
+            `on this agreement. Review it, then sign below.</p>`;
+        } catch {
+          // The banner is a courtesy. The agreement renders without it.
+        }
       }
     } catch (error) { say("agreement-status", error.message, "bad"); }
   })();

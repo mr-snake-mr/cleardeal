@@ -17,6 +17,12 @@ if (-not (Test-Path $python)) {
 
 Push-Location $backend
 try {
+    # First, because it is the cheapest check and the only one that can stop a
+    # commit for a reason no test would ever catch: the work was not declared.
+    Write-Host "== skill gate ==" -ForegroundColor Cyan
+    & $python (Join-Path $PSScriptRoot "tools\skillgate.py")
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
     Write-Host "== ruff ==" -ForegroundColor Cyan
     & $python -m ruff check .
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

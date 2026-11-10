@@ -44,7 +44,7 @@ That rejection rule is the whole product. An AI that reads contracts is not nove
 | Change approval into `v(n+1)` | **not built** - needs a pricing decision, see `docs/13` |
 | Video, Render deploy | not done; `render.yaml` has never run |
 
-`./verify.ps1` runs lint, a migration round trip and the suite in one command and
+`./verify.ps1` runs the skill gate, lint, a migration round trip and the suite in one command and
 prints VERIFIED or fails. That is the shortest honest answer to "is it real".
 
 ## The PayPal position, stated before it is asked

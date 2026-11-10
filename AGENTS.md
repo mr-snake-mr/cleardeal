@@ -20,7 +20,15 @@ Before any step — write, edit, delete, refactor, test, deploy — the Author m
 1. Sweep the workspace skill catalog (`hacko/SKILLS-CATALOG.md` — outside this repo, not committed).
 2. Read each applicable `SKILL.md` in full.
 3. Adopt it as the procedure for this step, following its checklists and stop conditions.
-4. Declare the applied and ruled-out sets in the task brief.
+4. Declare the applied and ruled-out sets in the task brief — concretely, as the two tables in [`SKILLS-LEDGER.md`](SKILLS-LEDGER.md).
+
+The declaration is executable, because a rule that only exists in prose is a rule nobody can fail:
+
+```powershell
+python tools\skillgate.py      # SKILL GATE: PASS (n applied, m ruled out)
+```
+
+It exits non-zero on: nothing applied; fewer than five ruled out; a name that is not installed; a reason under 20 characters or a placeholder; the same skill on both lists. [`verify.ps1`](verify.ps1) runs it first, and [`backend/tests/test_skillgate.py`](backend/tests/test_skillgate.py) keeps the gate able to fail.
 
 Reading a skill then working outside it is a violation, not a partial pass. Rejected on sight: *"it's trivial"*, *"the skill is overkill"*, *"I already know this pattern"*, *"let me check the file first"*.
 
@@ -32,7 +40,7 @@ Every task, without exception:
 
 ```
 TASK       <id> — <one line>
-SKILLS     <applied>  |  ruled out: <skill -> reason>
+SKILLS     <applied>  |  ruled out: <skill -> reason>   [tools/skillgate.py PASS]
 CHANGES    <files>
 EVIDENCE   <command> -> <output>
 --- AUDIT ---

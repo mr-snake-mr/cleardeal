@@ -48,11 +48,17 @@ written.*
 
 **Send**, then **Approve as freelancer**, then **Approve as client**.
 
-Press **Invite the client** and open the link in a private window, then approve as
-the client from there. Say: *two signatures need two principals — the owner signs
-as freelancer, and the client role only opens for the account named on this
-project's invitation (doc 16 A-15). A client who already has an account signs in
-with it instead; the link cannot stand in for a password.*
+Press **Invite the client**, then **Copy link** — or skip the clipboard and press
+**Sign as the client in this tab**. That link carries the client's own session, so
+the page becomes the client's view: a banner naming the account, the agreement,
+and one button. Press **Sign as client** and the status goes `APPROVED`.
+
+Say: *two signatures need two principals — the owner signs as freelancer, and the
+client role only opens for the account named on this project's invitation (doc 16
+A-15). This tab is now that account, not a second role for the same one. A client
+who already has an account signs in with it instead; the link cannot stand in for
+a password.* A private window keeps both sessions open at once if you want to
+show them side by side.
 
 ## 1:45 — money
 
