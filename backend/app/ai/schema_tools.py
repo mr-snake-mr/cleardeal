@@ -90,8 +90,35 @@ def _resolve_refs(node: Any, defs: dict[str, Any], depth: int = 0) -> Any:
     return node
 
 
+def _single_type(node: dict[str, Any]) -> dict[str, Any]:
+    """Force `type` to one string and express nullability as `nullable`.
+
+    `responseSchema` is the protobuf `Schema` message, not JSON Schema: `type` is
+    a single enum field. A `["string", "null"]` array is rejected before the
+    model is reached —
+
+        Unknown name "type" ... Proto field is not repeating, cannot start list
+
+    — which is a 400 on every call carrying a nullable field. `nullable` is the
+    message's own field for it, so no expressiveness is lost.
+    """
+    existing = node.get("type")
+    if isinstance(existing, list):
+        non_null = [item for item in existing if item != "null"]
+        if len(non_null) == 1:
+            node["type"] = non_null[0]
+        else:
+            # A union of two non-null scalars has no single-enum form. Dropping
+            # `type` leaves the field unconstrained rather than mis-typed, and
+            # Pydantic is the layer that enforces the union on the way back.
+            node.pop("type", None)
+        if len(non_null) != len(existing):
+            node["nullable"] = True
+    return node
+
+
 def _collapse_nullable(node: Any) -> Any:
-    """`anyOf: [X, {type: null}]` -> `X` with `null` added to its type."""
+    """`anyOf: [X, {type: null}]` -> `X` marked `nullable`."""
     if isinstance(node, list):
         return [_collapse_nullable(item) for item in node]
     if not isinstance(node, dict):
@@ -110,18 +137,16 @@ def _collapse_nullable(node: Any) -> Any:
             collapsed.pop("anyOf", None)
             inner = _collapse_nullable(others[0])
             collapsed.update({k: v for k, v in inner.items() if k != "title"})
-            existing = collapsed.get("type")
-            if isinstance(existing, str):
-                collapsed["type"] = [existing, "null"]
-            elif isinstance(existing, list) and "null" not in existing:
-                collapsed["type"] = [*existing, "null"]
-            return collapsed
+            collapsed["nullable"] = True
+            return _single_type(collapsed)
 
-    return {
-        key: _collapse_nullable(value)
-        for key, value in node.items()
-        if key not in _DROP_KEYS
-    }
+    return _single_type(
+        {
+            key: _collapse_nullable(value)
+            for key, value in node.items()
+            if key not in _DROP_KEYS
+        }
+    )
 
 
 def generation_schema(model: type[BaseModel]) -> dict[str, Any]:

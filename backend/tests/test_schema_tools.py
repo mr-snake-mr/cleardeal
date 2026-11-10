@@ -59,14 +59,38 @@ def test_no_refs_or_defs_survive():
     assert "$ref" not in blob
 
 
-def test_a_nullable_field_uses_a_type_array_not_anyof():
-    """The documented null idiom. `anyOf` here is what Pydantic emits by default
-    for `str | None`, and it doubles the branching factor of the grammar."""
+def test_a_nullable_field_uses_nullable_not_a_type_array():
+    """`anyOf` must go, but `type` may not become a list to compensate.
+
+    `responseSchema` is the protobuf `Schema` message, where `type` is a single
+    enum value. A JSON-Schema type array is rejected by the live API before the
+    model is ever reached:
+
+        Unknown name "type" ... Proto field is not repeating, cannot start list
+
+    Nullability has its own field. This test used to assert the array, which is
+    how a 400 on every analysis call survived a green suite.
+    """
     schema = generation_schema(Nested)
     note = schema["properties"]["note"]
 
     assert "anyOf" not in note
-    assert note["type"] == ["string", "null"]
+    assert note["type"] == "string"
+    assert note["nullable"] is True
+
+
+def test_no_type_is_ever_a_list_anywhere():
+    """The proto constraint, checked across every real schema the product sends.
+
+    One list-typed `type` anywhere in the tree is a 400 for the whole call, so a
+    spot check on one field is not enough.
+    """
+    from app.ai.schemas import AgreementDraft, BriefAnalysis, ChangeAnalysis
+
+    for model in (Nested, BriefAnalysis, AgreementDraft, ChangeAnalysis):
+        for node in _walk(generation_schema(model)):
+            if "type" in node:
+                assert isinstance(node["type"], str), f"{model.__name__}: {node['type']!r}"
 
 
 def test_no_anyof_anywhere_in_the_payload():
@@ -113,7 +137,8 @@ def test_a_required_nullable_field_stays_required_and_nullable():
     schema = generation_schema(Strict)
 
     assert schema["required"] == ["quote"]
-    assert schema["properties"]["quote"]["type"] == ["string", "null"]
+    assert schema["properties"]["quote"]["type"] == "string"
+    assert schema["properties"]["quote"]["nullable"] is True
 
 
 def test_the_real_analysis_schema_is_flat_and_keeps_its_fields():
