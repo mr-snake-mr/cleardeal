@@ -6,7 +6,9 @@ Two jobs, kept separate so a re-take only repeats the second:
     python demo/narrate.py --mux marks.json
                                         # place them on the video at the marks
 
-The key is read from `demo/.gnani-key` and never printed. It is gitignored.
+The key is resolved, in order, from `GNANI_API_KEY`, then `~/.gnani/key`, then
+`demo/.gnani-key`. The last one is gitignored; the first two are machine-wide, so a
+re-take works from any checkout. The key is never printed.
 
 `marks.json` is `{"seg_1": 3.4, "seg_2": 21.0, ...}` — seconds from the start of
 the recording — produced from the `MARK` lines the recorder prints. Placing
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -29,6 +32,7 @@ AUDIO = HERE / "audio"
 VIDEO = HERE / "cleardeal-demo.webm"
 FINAL = HERE / "cleardeal-demo.mp4"
 KEY_FILE = HERE / ".gnani-key"
+GLOBAL_KEY_FILE = Path.home() / ".gnani" / "key"
 
 API = "https://api.vachana.ai/api/v1/tts/inference"
 VOICE = "Devika"  # en-IN, professional: a demo is a briefing, not a trailer
@@ -47,11 +51,28 @@ SEGMENTS = {
 }
 
 
+def resolve_key() -> str:
+    """The first key that exists wins: env, then the machine-wide file, then the repo.
+
+    Three places, one direction, so a clone with no local file still narrates and a
+    machine-wide key can be rotated in one spot instead of in every checkout.
+    """
+    from_env = os.environ.get("GNANI_API_KEY", "").strip()
+    if from_env:
+        return from_env
+    for candidate in (GLOBAL_KEY_FILE, KEY_FILE):
+        if candidate.is_file():
+            text = candidate.read_text(encoding="utf-8").strip()
+            if text:
+                return text
+    return ""
+
+
 def speak() -> int:
-    key = KEY_FILE.read_text(encoding="utf-8").strip()
+    key = resolve_key()
     AUDIO.mkdir(exist_ok=True)
     if not key:
-        print("no key in demo/.gnani-key")
+        print("no key: set GNANI_API_KEY, or write ~/.gnani/key or demo/.gnani-key")
         return 1
 
     failures = 0
@@ -122,12 +143,26 @@ def mux(marks_path: Path) -> int:
     return 0
 
 
+def where_key() -> str:
+    """Which source wins, named but not quoted — the key itself never leaves the file."""
+    if os.environ.get("GNANI_API_KEY", "").strip():
+        return "env"
+    for candidate in (GLOBAL_KEY_FILE, KEY_FILE):
+        if candidate.is_file() and candidate.read_text(encoding="utf-8").strip():
+            return "~/.gnani/key" if candidate is GLOBAL_KEY_FILE else "demo/.gnani-key"
+    return "none"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--speak", action="store_true")
     parser.add_argument("--mux", type=Path)
+    parser.add_argument("--where-key", action="store_true", help="report the key source")
     args = parser.parse_args()
 
+    if args.where_key:
+        print(where_key())
+        return 0
     if args.speak:
         return speak()
     if args.mux:
